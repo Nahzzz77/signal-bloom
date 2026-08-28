@@ -1,0 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  overflow-x: hidden;
+  background: #000;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.font-instrument {
+  font-family: 'Instrument Serif', serif;
+}
+
+.article-copy p {
+  margin: 0 0 1.45rem;
+  font-size: 17px;
+  line-height: 2;
+  letter-spacing: 0.015em;
+  text-align: justify;
+}
+
+.article-copy h2 {
+  margin: 4rem 0 1.4rem;
+  font-size: clamp(1.55rem, 4vw, 2rem);
+  line-height: 1.35;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.article-copy h3 {
+  margin: 2.5rem 0 1rem;
+  font-size: 1.18rem;
+  line-height: 1.5;
+  font-weight: 650;
+}
+
+.article-copy figure {
+  margin: 3.5rem -1rem;
+}
+
+.article-copy figure img {
+  display: block;
+  width: 100%;
+  border-radius: 2px;
+}
+
+.article-copy figcaption {
+  margin-top: .75rem;
+  color: rgb(0 0 0 / .48);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.article-copy .sources {
+  margin-top: 4rem;
+  border-top: 1px solid rgb(0 0 0 / .15);
+}
+
+.article-copy .sources ul {
+  display: grid;
+  gap: .8rem;
+  list-style: none;
+}
+
+.article-copy .sources a {
+  color: rgb(0 0 0 / .65);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (min-width: 768px) {
+  .article-copy p { font-size: 18px; }
+  .article-copy figure { margin-inline: -2rem; }
+}

@@ -1,0 +1,26 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+.env
+.env.*
+!.env.example
+tmp/
+node_modules/
+dist/
+*.tsbuildinfo
+review-site/vite.config.js
+review-site/vite.config.d.ts
+outputs/*/
+!outputs/.gitkeep
+
+# Private per-edition inputs. Only synthetic structure examples are versioned.
+data/seeds/*.json
+!data/seeds/example.json
+data/platform_rules/*.json
+!data/platform_rules/example.json
+
+# User-generated preview content must stay in outputs/<date>/.
+review-site/public/articles/
+review-site/public/images/
+review-site/public/edition.json

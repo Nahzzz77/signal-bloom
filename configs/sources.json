@@ -1,0 +1,106 @@
+{
+  "timezone": "Asia/Shanghai",
+  "lookback_hours": 48,
+  "max_candidates": 30,
+  "max_selected": 10,
+  "sources": [
+    {
+      "id": "aihot",
+      "name": "AIHOT",
+      "type": "web_discovery",
+      "url": "https://aihot.virxact.com/",
+      "tier": 3,
+      "role": "热点发现与原始链接回溯",
+      "evidence_policy": "不得单独支撑关键事实，必须回溯厂商、论文、代码仓库或监管原文",
+      "usage_policy_url": "https://aihot.virxact.com/agent",
+      "usage_policy": "个人非商业、公益非商业和组织内部使用可按公开入口访问；对外商业产品、客户交付、公开镜像或批量再分发须先取得书面授权",
+      "enabled": true
+    },
+    {
+      "id": "gorden_ai_daily",
+      "name": "Gorden Sun AI 资讯日报",
+      "type": "web_discovery",
+      "url": "https://gorden-sun.notion.site/527689cd2b294e60912f040095e803c5?v=4f6cc12006c94f47aee4dc909511aeb5",
+      "tier": 3,
+      "role": "人工策展线索与中文语境补充",
+      "evidence_policy": "优先使用条目中的官方外链，策展摘要只作线索",
+      "enabled": true
+    },
+    {
+      "id": "djyanbao_aigc",
+      "name": "洞见研报 AIGC 搜索",
+      "type": "research_index",
+      "url": "https://www.djyanbao.com/report/search?q=AIGC",
+      "tier": 3,
+      "role": "行业背景与报告线索",
+      "evidence_policy": "仅处理公开元数据与公开摘要，不绕过登录或付费限制，不搬运报告正文",
+      "enabled": true
+    },
+    {
+      "id": "openai_news",
+      "name": "OpenAI News",
+      "type": "rss",
+      "url": "https://openai.com/news/rss.xml",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "id": "google_deepmind",
+      "name": "Google DeepMind Blog",
+      "type": "web_discovery",
+      "url": "https://deepmind.google/discover/blog/",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "id": "anthropic_news",
+      "name": "Anthropic News",
+      "type": "web_discovery",
+      "url": "https://www.anthropic.com/news",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "id": "microsoft_ai",
+      "name": "Microsoft AI Blog",
+      "type": "web_discovery",
+      "url": "https://blogs.microsoft.com/ai/",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "id": "huggingface_blog",
+      "name": "Hugging Face Blog",
+      "type": "web_discovery",
+      "url": "https://huggingface.co/blog",
+      "tier": 1,
+      "enabled": true
+    },
+    {
+      "id": "github_trending",
+      "name": "GitHub Trending",
+      "type": "web_discovery",
+      "url": "https://github.com/trending?since=daily",
+      "tier": 2,
+      "role": "开源项目发现，最终事实回溯到项目仓库和发布记录",
+      "enabled": true
+    },
+    {
+      "id": "huggingface_trending_models",
+      "name": "Hugging Face Trending Models",
+      "type": "web_discovery",
+      "url": "https://huggingface.co/models?sort=trending",
+      "tier": 2,
+      "role": "模型发现，模型卡只能证明发布者声明的能力",
+      "enabled": true
+    },
+    {
+      "id": "arxiv_ai",
+      "name": "arXiv cs.AI",
+      "type": "rss",
+      "url": "https://export.arxiv.org/rss/cs.AI",
+      "tier": 2,
+      "enabled": false
+    }
+  ]
+}

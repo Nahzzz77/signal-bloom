@@ -1,0 +1,19 @@
+{
+  "verified_at": "2099-01-01T00:00:00+08:00",
+  "timezone": "Asia/Shanghai",
+  "allowed_evidence_urls": [],
+  "wechat": {
+    "verified_sources": [],
+    "hard_boundaries": [],
+    "product_controls": [],
+    "unknowns": []
+  },
+  "woshipm": {
+    "verified_sources": [],
+    "accepted_content": [],
+    "rejected_or_discouraged": [],
+    "submission_checks": [],
+    "crowded_angles": [],
+    "ai_policy_unknown": ""
+  }
+}

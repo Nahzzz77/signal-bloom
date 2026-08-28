@@ -1,0 +1,51 @@
+{
+  "version": "2026-08-28-mvp",
+  "common": {
+    "automation_boundary": "editorial_research_and_candidate_draft_only",
+    "require_evidence_urls": true,
+    "require_ai_disclosure_check": true,
+    "require_human_substantive_edit": true,
+    "require_human_final_review": true,
+    "retain_edit_history": true,
+    "min_final_image_assets": 4,
+    "max_final_image_assets": 5
+  },
+  "wechat": {
+    "display_name": "微信公众号",
+    "reader": "关注 AI 产品、工具和行业变化的中文读者",
+    "target_length": "6500-8500 Chinese characters, hard minimum 6000",
+    "min_chinese_characters": 6000,
+    "target_max_chinese_characters": 8500,
+    "hard_max_chinese_characters": 10000,
+    "min_source_count": 4,
+    "min_final_image_count": 2,
+    "editorial_goal": "把今天发生的事讲清楚，让读者知道它会改变什么",
+    "rules": [
+      "公开资料形成的稿件必须保留关键来源",
+      "正文不得少于 6000 个汉字，材料不足时阻塞写作，不得重复凑字",
+      "不得使用 Markdown 表格，比较信息改写为平台可发布的段落、小标题或图片",
+      "不得把未实际运行的测试写成作者亲历",
+      "AI 输出仅作编辑底稿，真人必须完成实质性取舍、改写与签发",
+      "不得使用脚本或接口自动批量发布",
+      "发布前人工核对原创声明、AI 生成合成内容标识和跨平台版权安排"
+    ]
+  },
+  "woshipm": {
+    "display_name": "人人都是产品经理",
+    "reader": "需要做产品判断、流程设计和团队落地的产品经理",
+    "target_length": "6500-8500 Chinese characters, hard minimum 6000",
+    "min_chinese_characters": 6000,
+    "target_max_chinese_characters": 8500,
+    "hard_max_chinese_characters": 10000,
+    "min_source_count": 5,
+    "min_final_image_count": 2,
+    "editorial_goal": "用具体案例解释一个产品决策、采用成本、风险或评估方法",
+    "rules": [
+      "稿件不能只是新闻罗列、工具推荐或功能百科",
+      "正文不得少于 6000 个汉字，材料不足时阻塞写作，不得重复凑字",
+      "不得使用 Markdown 表格，比较信息改写为平台可发布的段落、小标题或图片",
+      "技术机制必须落到用户、成本、风险、指标或团队责任",
+      "投稿前重新核对官方投稿指南、同题库存、原创授权和白名单要求"
+    ]
+  }
+}

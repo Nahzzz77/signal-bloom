@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "status": {"type": "string", "enum": ["ready", "blocked"]},
+    "platform": {"type": "string", "enum": ["wechat", "woshipm"]},
+    "title": {"type": ["string", "null"], "minLength": 4},
+    "subtitle": {"type": ["string", "null"]},
+    "body_markdown": {"type": ["string", "null"], "minLength": 6000},
+    "summary": {"type": ["string", "null"], "minLength": 10},
+    "source_urls": {"type": "array", "items": {"type": "string", "minLength": 8}},
+    "ai_disclosure_note": {"type": ["string", "null"], "minLength": 8},
+    "editor_notes": {"type": "array", "items": {"type": "string", "minLength": 2}},
+    "blocking_reason": {"type": ["string", "null"]},
+    "missing_evidence": {"type": "array", "items": {"type": "string", "minLength": 2}}
+  },
+  "required": ["status", "platform", "title", "subtitle", "body_markdown", "summary", "source_urls", "ai_disclosure_note", "editor_notes", "blocking_reason", "missing_evidence"],
+  "additionalProperties": false
+}

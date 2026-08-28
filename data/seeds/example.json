@@ -1,0 +1,18 @@
+{
+  "edition_date": "2099-01-01",
+  "items": [
+    {
+      "id": "example-001",
+      "title": "样例模型发布",
+      "url": "https://example.com/model",
+      "published_at": "2099-01-01T00:00:00+08:00",
+      "source_name": "Example",
+      "source_tier": 1,
+      "is_primary_source": true,
+      "summary": "仅用于离线验证文件、状态和质检链路。",
+      "evidence_urls": ["https://example.com/model"],
+      "discovery_urls": [],
+      "tags": ["模型"]
+    }
+  ]
+}
