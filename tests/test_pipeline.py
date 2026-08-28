@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from ai_news_agent.pipeline import NewsPipeline
+from ai_news_agent.preview import install_prebuilt_preview
 from ai_news_agent.provider import DemoProvider
 
 
@@ -120,6 +121,19 @@ class PipelineTests(unittest.TestCase):
             edition = json.loads((output / "edition.json").read_text(encoding="utf-8"))
             self.assertEqual(edition["edition_date"], "2099-01-01")
             self.assertEqual(edition["articles"]["wechat"]["title"], "产品团队如何核对一次模型更新")
+            bundle_before = (output / "research_bundle.json").read_bytes()
+            self.assertTrue(
+                install_prebuilt_preview(
+                    root,
+                    output,
+                    {
+                        "wechat": output / "wechat_article.md",
+                        "woshipm": output / "woshipm_article.md",
+                    },
+                )
+            )
+            self.assertEqual(bundle_before, (output / "research_bundle.json").read_bytes())
+            self.assertFalse((root / "review-site" / "dist" / "research_bundle.json").exists())
             self.assertIn(
                 "hero-flower.mp4",
                 {artifact["path"] for artifact in manifest["artifacts"]},

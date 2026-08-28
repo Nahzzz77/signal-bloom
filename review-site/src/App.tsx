@@ -1,7 +1,7 @@
 import { Flower2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-type View = 'home' | 'story' | 'collection' | 'inquire'
+type View = 'home' | 'news' | 'story' | 'collection' | 'inquire'
 type Block =
   | { type: 'h2'; text: string }
   | { type: 'h3'; text: string }
@@ -20,10 +20,141 @@ type EditionSummary = {
   edition_date: string
   articles: { wechat: EditionArticle; woshipm: EditionArticle }
 }
+type ClaimStatus = 'supported' | 'partial' | 'conflicting' | 'unverified'
+type ResearchClaim = { text: string; status: ClaimStatus; evidence_urls: string[] }
+type ResearchItem = {
+  rank: number
+  title: string
+  event_time: string
+  summary: string
+  why_it_matters: string
+  risk_note: string
+  source_urls: string[]
+  claims: ResearchClaim[]
+}
+type ReferenceMaterial = {
+  title: string
+  url: string
+  purpose: string
+  status: Exclude<ClaimStatus, 'conflicting'>
+}
+type ResearchTopic = {
+  platform: 'wechat' | 'woshipm'
+  title: string
+  angle: string
+  audience_decision: string
+  new_value: string
+}
+type ResearchBundle = {
+  edition_date: string
+  digest_title: string
+  executive_summary: string
+  items: ResearchItem[]
+  reference_materials: ReferenceMaterial[]
+  topics: ResearchTopic[]
+}
+type ResearchState =
+  | { status: 'loading' }
+  | { status: 'empty' }
+  | { status: 'error' }
+  | { status: 'ready'; data: ResearchBundle }
 
 const entrance = 'cubic-bezier(0.16, 1, 0.3, 1)'
 const overlayEase = 'cubic-bezier(0.76, 0, 0.24, 1)'
 const base = import.meta.env.BASE_URL
+const claimLabels: Record<ClaimStatus, string> = {
+  supported: '已核实',
+  partial: '部分支持',
+  conflicting: '存在冲突',
+  unverified: '未核实',
+}
+const claimStyles: Record<ClaimStatus, string> = {
+  supported: 'bg-[#dce8d8] text-[#31512d]',
+  partial: 'bg-[#eee2c7] text-[#72551d]',
+  conflicting: 'bg-[#ecd5d0] text-[#7b3025]',
+  unverified: 'bg-black/10 text-black/55',
+}
+
+function isResearchBundle(value: unknown): value is ResearchBundle {
+  if (!value || typeof value !== 'object') return false
+  const bundle = value as Partial<ResearchBundle>
+  return typeof bundle.edition_date === 'string'
+    && typeof bundle.digest_title === 'string'
+    && typeof bundle.executive_summary === 'string'
+    && Array.isArray(bundle.reference_materials)
+    && bundle.reference_materials.every((candidate) => {
+      if (!candidate || typeof candidate !== 'object') return false
+      const material = candidate as Partial<ReferenceMaterial>
+      return typeof material.title === 'string'
+        && typeof material.url === 'string'
+        && typeof material.purpose === 'string'
+        && (material.status === 'supported' || material.status === 'partial' || material.status === 'unverified')
+    })
+    && Array.isArray(bundle.topics)
+    && bundle.topics.every((candidate) => {
+      if (!candidate || typeof candidate !== 'object') return false
+      const topic = candidate as Partial<ResearchTopic>
+      return (topic.platform === 'wechat' || topic.platform === 'woshipm')
+        && typeof topic.title === 'string'
+        && typeof topic.angle === 'string'
+        && typeof topic.audience_decision === 'string'
+        && typeof topic.new_value === 'string'
+    })
+    && Array.isArray(bundle.items)
+    && bundle.items.every((candidate) => {
+      if (!candidate || typeof candidate !== 'object') return false
+      const item = candidate as Partial<ResearchItem>
+      return typeof item.rank === 'number'
+        && typeof item.title === 'string'
+        && typeof item.event_time === 'string'
+        && typeof item.summary === 'string'
+        && typeof item.why_it_matters === 'string'
+        && typeof item.risk_note === 'string'
+        && Array.isArray(item.source_urls)
+        && item.source_urls.every((url) => typeof url === 'string')
+        && Array.isArray(item.claims)
+        && item.claims.every((claimCandidate) => {
+          if (!claimCandidate || typeof claimCandidate !== 'object') return false
+          const claim = claimCandidate as Partial<ResearchClaim>
+          return typeof claim.text === 'string'
+            && typeof claim.status === 'string'
+            && claim.status in claimLabels
+            && Array.isArray(claim.evidence_urls)
+            && claim.evidence_urls.every((url) => typeof url === 'string')
+        })
+    })
+}
+
+function sourceHost(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+function formatEventTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: value.includes('T') ? '2-digit' : undefined,
+    minute: value.includes('T') ? '2-digit' : undefined,
+  }).format(date)
+}
+
+function displayDigestTitle(value: string) {
+  const normalized = value.replace(/^AI\s*资讯日报\s*[｜|:：-]?\s*/i, '')
+  return normalized === value ? value : `SignalBloom 今日信号｜${normalized}`
+}
+
+function itemStatus(item: ResearchItem): ClaimStatus {
+  if (item.claims.some((claim) => claim.status === 'conflicting')) return 'conflicting'
+  if (item.claims.some((claim) => claim.status === 'unverified')) return 'unverified'
+  if (item.claims.some((claim) => claim.status === 'partial')) return 'partial'
+  return 'supported'
+}
 
 function parseArticle(markdown: string): Article {
   const lines = markdown.split(/\r?\n/)
@@ -125,7 +256,7 @@ function Hero({ visible }: { visible: boolean }) {
   )
 }
 
-function TodayContent({ go }: { go: (view: View) => void }) {
+function TodayContent({ go, research }: { go: (view: View) => void; research: ResearchBundle | null }) {
   const [summary, setSummary] = useState<EditionSummary | null>(null)
 
   useEffect(() => {
@@ -144,7 +275,7 @@ function TodayContent({ go }: { go: (view: View) => void }) {
     return () => { active = false }
   }, [])
 
-  if (!summary) {
+  if (!summary && !research) {
     return (
       <section id="today" className="flex min-h-screen scroll-mt-20 items-center bg-[#f4f1e8] px-6 py-24 text-[#171717] md:px-10">
         <div className="mx-auto w-full max-w-5xl border-t border-black/15 pt-10">
@@ -161,7 +292,7 @@ function TodayContent({ go }: { go: (view: View) => void }) {
 
   const metrics = (article: EditionArticle) =>
     `${article.chinese_characters} 个汉字 · ${article.source_count} 个关键来源 · ${article.image_count} 张配图`
-  const editions = [
+  const editions = summary ? [
     {
       eyebrow: '微信公众号',
       title: summary.articles.wechat.title,
@@ -176,20 +307,42 @@ function TodayContent({ go }: { go: (view: View) => void }) {
       view: 'collection' as View,
       action: '查看产品经理预览',
     },
-  ]
+  ] : []
+  const editionDate = research?.edition_date ?? summary?.edition_date ?? ''
+  const researchSources = research
+    ? new Set(research.items.flatMap((item) => item.source_urls)).size
+    : 0
 
   return (
     <section id="today" className="min-h-screen scroll-mt-20 bg-[#f4f1e8] px-6 py-24 text-[#171717] md:px-10 md:py-32">
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-col gap-8 border-b border-black/15 pb-12 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.24em] text-black/45">{summary.edition_date.replace(/-/g, '.')} · 今日编辑包</p>
-            <h2 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">从线索到成稿，本次内容已经整理完毕</h2>
+            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.24em] text-black/45">{editionDate.replace(/-/g, '.')} · 本地内容工作台</p>
+            <h2 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">先看今天发生了什么，再决定写什么</h2>
           </div>
-          <p className="max-w-md text-base leading-8 text-black/55">两篇长文均超过六千汉字，五张配图已放入对应段落，不含无法直接发布的 Markdown 表格。</p>
+          <p className="max-w-md text-base leading-8 text-black/55">SignalBloom 先交付去重、排序和核验后的资讯结果，两篇平台文章是这份研究包的下游产物。</p>
         </div>
 
-        <div className="mt-10 grid gap-5 md:grid-cols-2">
+        {research && (
+          <article className="mt-10 grid gap-10 bg-black p-7 text-white md:grid-cols-[1fr_auto] md:items-end md:p-10">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">今日资讯 · {research.items.length} 条入选 · {researchSources} 个来源</p>
+              <h3 className="mt-6 max-w-4xl text-3xl font-semibold leading-tight tracking-tight md:text-5xl">{displayDigestTitle(research.digest_title)}</h3>
+              <p className="mt-6 max-w-4xl text-base leading-8 text-white/60">{research.executive_summary}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => go('news')}
+              className="self-start rounded-full bg-white px-6 py-3 text-sm font-medium text-black transition hover:bg-white/90 md:self-end"
+            >
+              查看全部资讯与证据
+            </button>
+          </article>
+        )}
+
+        {summary && <p className="mb-5 mt-16 text-xs font-semibold uppercase tracking-[0.22em] text-black/40">平台内容输出</p>}
+        <div className="grid gap-5 md:grid-cols-2">
           {editions.map((edition) => (
             <article key={edition.eyebrow} className="flex min-h-[360px] flex-col justify-between bg-black p-7 text-white md:p-10">
               <div>
@@ -214,6 +367,198 @@ function TodayContent({ go }: { go: (view: View) => void }) {
         </div>
       </div>
     </section>
+  )
+}
+
+function DailyNews({ state, go, onRetry }: { state: ResearchState; go: (view: View) => void; onRetry: () => void }) {
+  if (state.status !== 'ready') {
+    const copy = {
+      loading: {
+        eyebrow: '正在读取',
+        title: '正在打开本地资讯包',
+        body: '正在从当前审核目录读取 research_bundle.json。',
+      },
+      empty: {
+        eyebrow: '私有内容区',
+        title: '尚未生成本地资讯包',
+        body: '运行 SignalBloom 后，本次搜索、去重和核验后的资讯会出现在这里。公开仓库不附带任何用户资讯。',
+      },
+      error: {
+        eyebrow: '读取失败',
+        title: '资讯包存在，但当前无法读取',
+        body: '请检查 research_bundle.json 是否为完整 JSON，并通过本地 HTTP 服务打开 review.html。',
+      },
+    }[state.status]
+    return (
+      <main className="flex min-h-screen items-center bg-[#f4f1e8] px-6 py-28 text-[#171717] md:px-10">
+        <div className="mx-auto w-full max-w-5xl border-t border-black/15 pt-10">
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/45">{copy.eyebrow}</p>
+          <h1 className="mt-6 max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">{copy.title}</h1>
+          <p className="mt-7 max-w-2xl text-base leading-8 text-black/55 md:text-lg">{copy.body}</p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            {state.status === 'error' && <button type="button" onClick={onRetry} className="rounded-full bg-black px-6 py-3 text-sm font-medium text-white">重新读取</button>}
+            {state.status !== 'loading' && <button type="button" onClick={() => go('home')} className="rounded-full border border-black/20 px-6 py-3 text-sm font-medium text-black">返回工作台</button>}
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  const bundle = state.data
+  const items = [...bundle.items].sort((left, right) => left.rank - right.rank)
+  const claims = items.flatMap((item) => item.claims)
+  const sourceCount = new Set(items.flatMap((item) => item.source_urls)).size
+  const supportedCount = claims.filter((claim) => claim.status === 'supported').length
+  const metrics = [
+    ['入选资讯', items.length],
+    ['事实主张', claims.length],
+    ['去重来源', sourceCount],
+    ['已核实主张', supportedCount],
+  ]
+
+  return (
+    <main className="min-h-screen bg-[#f4f1e8] px-6 pb-28 pt-28 text-[#171717] md:px-10 md:pt-36">
+      <div className="mx-auto max-w-6xl">
+        <header className="grid gap-10 border-b border-black/15 pb-14 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/45">{bundle.edition_date.replace(/-/g, '.')} · 今日资讯</p>
+            <h1 className="mt-6 text-5xl font-semibold leading-[0.95] tracking-tight md:text-7xl">今天搜到了什么</h1>
+          </div>
+          <div className="lg:pt-9">
+            <h2 className="text-2xl font-semibold leading-tight tracking-tight md:text-4xl">{displayDigestTitle(bundle.digest_title)}</h2>
+            <p className="mt-6 text-base leading-8 text-black/60 md:text-lg">{bundle.executive_summary}</p>
+          </div>
+        </header>
+
+        <section aria-label="资讯统计" className="grid grid-cols-2 border-b border-black/15 md:grid-cols-4">
+          {metrics.map(([label, value]) => (
+            <div key={label} className="border-black/15 py-7 odd:border-r md:border-r md:px-6 md:first:pl-0 md:last:border-r-0">
+              <p className="font-instrument text-4xl md:text-5xl">{value}</p>
+              <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-black/40">{label}</p>
+            </div>
+          ))}
+        </section>
+
+        <div className="flex flex-col gap-5 pb-8 pt-16 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-black/40">按编辑优先级排序</p>
+            <h2 className="mt-4 text-3xl font-semibold tracking-tight md:text-5xl">{items.length} 条值得今天关注的信号</h2>
+          </div>
+          <p className="max-w-md text-sm leading-7 text-black/50">产品影响和风险边界始终展开，事实主张与原始来源可按需查看。</p>
+        </div>
+
+        <ol className="list-none">
+          {items.map((item) => {
+            const verification = itemStatus(item)
+            return (
+              <li key={`${item.rank}-${item.title}`} className="border-t border-black/15 py-10 md:py-14">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="flex items-baseline gap-4">
+                    <span className="font-instrument text-4xl text-black/35">{String(item.rank).padStart(2, '0')}</span>
+                    <time className="text-xs font-semibold uppercase tracking-[0.18em] text-black/40" dateTime={item.event_time}>{formatEventTime(item.event_time)}</time>
+                  </div>
+                  <span className={`rounded-full px-3 py-1.5 text-xs font-semibold ${claimStyles[verification]}`}>{claimLabels[verification]}</span>
+                </div>
+
+                <div className="mt-7 grid gap-8 md:grid-cols-[1.45fr_0.85fr] md:gap-12">
+                  <div>
+                    <h3 className="text-3xl font-semibold leading-tight tracking-tight md:text-5xl">{item.title}</h3>
+                    <p className="mt-6 text-base leading-8 text-black/65 md:text-lg">{item.summary}</p>
+                  </div>
+                  <div className="grid gap-4">
+                    <section className="bg-black p-6 text-white">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">产品判断</p>
+                      <p className="mt-4 text-sm leading-7 text-white/75">{item.why_it_matters}</p>
+                    </section>
+                    <section className="border border-[#b66a57]/25 bg-[#efe2dc] p-6">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7b3025]/60">边界与风险</p>
+                      <p className="mt-4 text-sm leading-7 text-[#5f3028]">{item.risk_note}</p>
+                    </section>
+                  </div>
+                </div>
+
+                <details className="group mt-8 border-t border-black/15 pt-5">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-black/65">
+                    <span>来源与事实核验 · {item.claims.length} 条主张 · {item.source_urls.length} 个来源</span>
+                    <span aria-hidden="true" className="text-xl font-normal transition group-open:rotate-45">+</span>
+                  </summary>
+                  <div className="mt-7 grid gap-10 md:grid-cols-[1.4fr_0.6fr]">
+                    <div className="grid gap-4">
+                      {item.claims.map((claim, index) => (
+                        <article key={`${claim.text}-${index}`} className="border-l border-black/20 pl-5">
+                          <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold ${claimStyles[claim.status]}`}>{claimLabels[claim.status]}</span>
+                          <p className="mt-3 text-sm leading-7 text-black/70">{claim.text}</p>
+                          {claim.evidence_urls.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+                              {claim.evidence_urls.map((url, evidenceIndex) => (
+                                <a key={`${url}-${evidenceIndex}`} href={url} target="_blank" rel="noreferrer" className="text-xs text-black/45 underline underline-offset-4">证据 {evidenceIndex + 1}</a>
+                              ))}
+                            </div>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-black/40">原始来源</p>
+                      <ul className="mt-4 grid gap-3">
+                        {item.source_urls.map((url, index) => (
+                          <li key={`${url}-${index}`}><a href={url} target="_blank" rel="noreferrer" className="break-all text-sm leading-6 text-black/60 underline underline-offset-4">{sourceHost(url)}</a></li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </details>
+              </li>
+            )
+          })}
+        </ol>
+
+        {(bundle.reference_materials.length > 0 || bundle.topics.length > 0) && (
+          <section className="grid gap-5 border-t border-black/15 pt-12 md:grid-cols-2">
+            {bundle.reference_materials.length > 0 && (
+              <details className="bg-white p-6 md:p-8">
+                <summary className="cursor-pointer text-lg font-semibold">补充研究材料 · {bundle.reference_materials.length}</summary>
+                <ul className="mt-6 grid gap-5">
+                  {bundle.reference_materials.map((material) => (
+                    <li key={material.url}>
+                      <a href={material.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-4">{material.title}</a>
+                      <p className="mt-2 text-sm leading-7 text-black/55">{material.purpose}</p>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {bundle.topics.length > 0 && (
+              <details className="bg-black p-6 text-white md:p-8">
+                <summary className="cursor-pointer text-lg font-semibold">基于这些资讯生成的选题 · {bundle.topics.length}</summary>
+                <div className="mt-6 grid gap-7">
+                  {bundle.topics.map((topic) => (
+                    <article key={topic.platform}>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">{topic.platform === 'wechat' ? '微信公众号' : '人人都是产品经理'}</p>
+                      <h3 className="mt-2 text-xl font-semibold">{topic.title}</h3>
+                      <p className="mt-3 text-sm leading-7 text-white/60">{topic.angle}</p>
+                      <p className="mt-2 text-sm leading-7 text-white/60">读者决策：{topic.audience_decision}</p>
+                      <p className="mt-2 text-sm leading-7 text-white/60">新增价值：{topic.new_value}</p>
+                    </article>
+                  ))}
+                </div>
+              </details>
+            )}
+          </section>
+        )}
+
+        <section className="mt-16 flex flex-col justify-between gap-6 border-t border-black/15 pt-10 md:flex-row md:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-black/40">下游内容</p>
+            <p className="mt-3 text-xl font-semibold">这份资讯包已分别转化为两个平台选题。</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => go('story')} className="rounded-full bg-black px-6 py-3 text-sm font-medium text-white">公众号预览</button>
+            <button type="button" onClick={() => go('collection')} className="rounded-full border border-black/20 px-6 py-3 text-sm font-medium text-black">产品经理文章</button>
+          </div>
+        </section>
+      </div>
+    </main>
   )
 }
 
@@ -368,6 +713,8 @@ export default function App() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
   const [view, setView] = useState<View>('home')
+  const [researchState, setResearchState] = useState<ResearchState>({ status: 'loading' })
+  const [researchRequest, setResearchRequest] = useState(0)
 
   useEffect(() => {
     const mountTimer = window.setTimeout(() => setMounted(true), 100)
@@ -386,6 +733,26 @@ export default function App() {
     return () => { document.body.style.overflow = '' }
   }, [menuOpen])
 
+  useEffect(() => {
+    let active = true
+    setResearchState({ status: 'loading' })
+    fetch(`${base}research_bundle.json`)
+      .then(async (response) => {
+        if (response.status === 404 || !response.headers.get('content-type')?.includes('json')) {
+          if (active) setResearchState({ status: 'empty' })
+          return
+        }
+        if (!response.ok) throw new Error('Unable to load research bundle')
+        const value: unknown = await response.json()
+        if (!isResearchBundle(value)) throw new Error('Invalid research bundle')
+        if (active) setResearchState({ status: 'ready', data: value })
+      })
+      .catch(() => {
+        if (active) setResearchState({ status: 'error' })
+      })
+    return () => { active = false }
+  }, [researchRequest])
+
   const navigate = (next: View) => {
     setMenuOpen(false)
     setView(next)
@@ -394,6 +761,7 @@ export default function App() {
 
   const navItems: Array<{ label: string; view: View }> = [
     { label: '内容工作台', view: 'home' },
+    { label: '今日资讯', view: 'news' },
     { label: '公众号预览', view: 'story' },
     { label: '产品经理预览', view: 'collection' },
     { label: '质量门说明', view: 'inquire' },
@@ -402,7 +770,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black">
-      <nav className={`fixed left-0 top-0 z-50 w-full transition-all duration-500 ${scrolled ? 'bg-black/80 backdrop-blur-md' : 'bg-transparent'}`}>
+      <nav className={`fixed left-0 top-0 z-50 w-full transition-all duration-500 ${scrolled || view !== 'home' ? 'bg-black/90 backdrop-blur-md' : 'bg-transparent'}`}>
         <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-6 md:h-20 md:px-10">
           <a href="#" onClick={(event) => { event.preventDefault(); navigate('home') }} className={`z-50 text-xl font-semibold tracking-tight text-white transition-all duration-700 md:text-2xl ${enter}`} style={{ transitionTimingFunction: entrance }}>SignalBloom</a>
           <button
@@ -443,7 +811,8 @@ export default function App() {
         </div>
       </div>
 
-      {view === 'home' && <><Hero visible={heroVisible} /><TodayContent go={navigate} /></>}
+      {view === 'home' && <><Hero visible={heroVisible} /><TodayContent go={navigate} research={researchState.status === 'ready' ? researchState.data : null} /></>}
+      {view === 'news' && <DailyNews state={researchState} go={navigate} onRetry={() => setResearchRequest((value) => value + 1)} />}
       {view === 'story' && <ArticlePreview platform="微信公众号预览" source="wechat.md" onHome={() => navigate('home')} />}
       {view === 'collection' && <ArticlePreview platform="人人都是产品经理预览" source="woshipm.md" onHome={() => navigate('home')} />}
       {view === 'inquire' && <ReviewSummary go={navigate} />}

@@ -11,6 +11,7 @@ SignalBloom 是一个以 Codex Harness 为执行内核的 AI 行业内容工作�
 - 读取人工策展的每日候选线索。
 - 规范化 URL，聚合重复事件，按来源层级与时效排序。
 - 生成资讯总览、事实主张、证据链接和双平台选题。
+- 在本地 `review.html` 中提供“今日资讯”视图，按重要度展示本次入选资讯、产品影响、风险边界、证据状态和原始来源。
 - 独立生成公众号与产品经理平台长文。
 - 执行字数、来源数、图片数、表格、跨平台相似度和 Human Writing 检查。
 - 将用户本地稿件和配图组装成 React 投稿前预览页。
@@ -22,6 +23,7 @@ SignalBloom 是一个以 Codex Harness 为执行内核的 AI 行业内容工作�
 flowchart LR
     A[人工候选线索] --> B[标准化与去重]
     B --> C[证据包与资讯总览]
+    C --> R[本地今日资讯视图]
     C --> D1[公众号选题与长文]
     C --> D2[产品经理选题与长文]
     D1 --> E[硬规则与 Human Writing 检查]
@@ -136,12 +138,12 @@ cd review-site && npm run build
 outputs/YYYY-MM-DD/
 ├── manifest.json
 ├── normalized_items.json
-├── research_bundle.json
+├── research_bundle.json  # “今日资讯”视图的唯一数据源
 ├── daily_digest.md
 ├── wechat_article.md
 ├── woshipm_article.md
 ├── qa_report.json
-├── review.html
+├── review.html           # 今日资讯、双平台文章与质量门
 ├── images/
 └── events/
 ```
@@ -163,7 +165,7 @@ PYTHONPATH=src python3 scripts/recheck_output.py outputs/YYYY-MM-DD --build-prev
 - 平台稿件、配图、质检报告与预览包。
 - Manifest、事件流、日志和编辑批注。
 
-这些文件被 `.gitignore` 阻止进入版本库。不要使用 `git add -f` 强制上传。预览构建也不会把用户内容回写到 `review-site/public/`。
+这些文件被 `.gitignore` 阻止进入版本库。不要使用 `git add -f` 强制上传。“今日资讯”结果同样属于用户本地生成内容；公开仓库不包含 `research_bundle.json`、用户资讯结果或内置真实样例。预览构建也不会把用户内容回写到 `review-site/public/`。
 
 ## 项目结构
 
@@ -182,6 +184,7 @@ tests/         离线单元测试
 ## 当前边界
 
 - AIHOT、Notion 日报和研报站点已进入来源策略，但 V0.1 的正式输入仍是人工策展的种子 JSON。
+- “今日资讯”展示本次候选输入经去重、筛选和证据核验后的结果，页面本身不会再发起一轮联网搜索。
 - 当前没有无人值守爬虫、定时调度器、业务数据库和告警。
 - 当前不会把文章写入任何内容平台。
 - 配图生成尚未接入每日 Python 流水线。

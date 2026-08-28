@@ -24,3 +24,4 @@ data/platform_rules/*.json
 review-site/public/articles/
 review-site/public/images/
 review-site/public/edition.json
+review-site/public/research_bundle.json

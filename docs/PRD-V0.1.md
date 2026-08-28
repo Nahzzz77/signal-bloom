@@ -219,6 +219,7 @@ AIHOT 的公开 Agent 接入页允许个人非商业、公益非商业和组织�
 | FR-303 | P0 | 为“人人都是产品经理”生成一个独立选题任务书，并落到用户、成本、风险、指标或团队责任。 |
 | FR-304 | P0 | 同一事件可以被两个平台采用，但角度、论证结构和读者收益不能只是同义改写。 |
 | FR-305 | P1 | 接入平台投稿规则核查和站内同题库存搜索；在无法核实时明确要求投稿前人工复核。 |
+| FR-306 | P0 | 在 `review.html` 中提供“今日资讯”视图。按入选顺序展示标题、事件时间、摘要、产品影响、风险边界、证据状态和来源链接。视图只读取同目录 `research_bundle.json`，不发起新的外部检索，也不建立第二份事实数据。 |
 
 ### 6.5 平台文章生成
 
@@ -242,7 +243,7 @@ AIHOT 的公开 Agent 接入页允许个人非商业、公益非商业和组织�
 | FR-502 | P0 | 检查入选资讯、Claim 和文章是否保留来源 URL。公众号稿至少 4 份具体来源，产品经理稿至少 5 份，数量不足时阻断。 |
 | FR-503 | P0 | 检查必需交付文件、平台标识、文章非空、AI 披露提示和编辑备注。 |
 | FR-504 | P0 | 生成 `qa_report.json`，将问题区分为阻塞项与警告项。 |
-| FR-505 | P0 | 生成 React 单页 `review.html`。首页使用项目相关文案和本地打包的花朵视频，向下滚动进入今日内容；导航切换到两篇平台预览与验收摘要。审核包用本地静态服务打开，阶段运行状态由 `manifest.json` 展示。 |
+| FR-505 | P0 | 生成 React 单页 `review.html`。首页使用项目相关文案和本地打包的花朵视频，工作台先展示“今日资讯”入口，再展示两篇平台文章。导航包含今日资讯、公众号预览、人人都是产品经理预览和质量门说明。`research_bundle.json` 缺失、为空或无效时显示明确空状态或错误，不回退到内置真实内容。审核包用本地静态服务打开，阶段运行状态由 `manifest.json` 展示。 |
 | FR-506 | P0 | 生成 `manifest.json` 和阶段事件流，便于定位具体在哪一步失败。 |
 | FR-507 | P0 | 系统不提供自动发布按钮，也不请求平台凭据。 |
 | FR-508 | P1 | 支持审核结果、编辑批注和稿件版本记录。 |
@@ -263,7 +264,7 @@ AIHOT 的公开 Agent 接入页允许个人非商业、公益非商业和组织�
 | U50 公众号写作 | Codex + Human Writing | ResearchBundle、公众号选题、平台规则 | 公众号 ArticleResult JSON / Markdown、事件 JSONL | 证据不足时记录 `blocked`，其他失败单独记录，不影响另一平台 |
 | U60 产品经理平台写作 | Codex + Human Writing | ResearchBundle、对应选题、平台规则 | Woshipm ArticleResult JSON / Markdown、事件 JSONL | 证据不足时记录 `blocked`，其他失败单独记录，不影响另一平台 |
 | U70 质量检查 | Python | 所有已有交付物 | `qa_report.json` | 输出阻塞项，不掩盖失败 |
-| U80 审核包渲染 | Python + React/Vite | Manifest、日报、文章、配图、QA | `review.html`、`assets/`、`articles/` | React 构建失败时保留 `review-legacy.html` 供排错 |
+| U80 审核包渲染 | Python + React/Vite | ResearchBundle、Manifest、日报、文章、配图、QA | `review.html`（含今日资讯视图）、`assets/`、`articles/` | React 构建失败时保留 `review-legacy.html` 供排错 |
 
 ### 7.1 Codex Harness 的职责
 
@@ -302,6 +303,8 @@ AIHOT 的公开 Agent 接入页允许个人非商业、公益非商业和组织�
 | QAReport | 自动质检结果 | `checks`、`blocking_issues`、`warnings`、`passed` |
 | ReviewRecord | 人工审核结论，V0.1 先由人外部记录 | `reviewer`、`decision`、`notes`、`reviewed_at` |
 | DeliveryPackage | 某天所有分发前文件的集合 | `manifest`、`digest`、`articles`、`qa_report`、`review_page` |
+
+“今日资讯”视图是 `ResearchBundle.items` 与 `claims` 的只读投影，不形成第二份事实源。
 
 ### 8.2 V0.1 文件映射
 
@@ -459,6 +462,7 @@ V0.1 自动化实际结束于 `REVIEW_READY` 或 `REVIEW_BLOCKED`。后三个人
 - Codex 只获得完成研究和本地写作所需的最低权限。
 - 不在 Prompt、输出、Fixture、日志或仓库中保存账号密码、Cookie、API Token 和个人隐私。
 - 公开仓库不保存任何用户的候选资料、研究包、稿件、配图、Manifest 或事件日志。
+- “今日资讯”视图及其 `research_bundle.json` 只存在于用户本地审核包，默认不进入 Git，也不得写入 `review-site/public/`。
 - V0.1 不登录内容平台，不调用发布接口，不向外部人员发送消息。
 - 不绕过验证码、付费墙、robots 限制或访问控制。
 - 模型输出必须经过 Schema 和业务规则校验后，才能成为下一个阶段的输入。
@@ -627,6 +631,9 @@ http://127.0.0.1:4173/review.html
 逐项确认：
 
 - 日报中的每条入选资讯至少有一个来源 URL。
+- “今日资讯”条目数量、排序和内容必须与 `research_bundle.json` 一致；每条至少保留一个来源链接。
+- `partial`、`conflicting`、`unverified` 状态必须在展开的事实核验中如实显示，不得被隐藏或改写为已证实。
+- 公开仓库或缺少本地研究包时，“今日资讯”只显示空状态，不展示内置真实内容。
 - 每个 Claim 都有证据状态；无证据内容没有被冒充成已证实事实。
 - 日报能回答“发生了什么、为什么重要、风险在哪里”。
 - 公众号稿与产品经理平台稿都来自当日 ResearchBundle，而不是自由发挥。
