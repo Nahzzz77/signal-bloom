@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+from .feishu import FeishuError, sync_output
 from .pipeline import NewsPipeline
 from .provider import CodexExecProvider, DemoProvider
 
@@ -52,6 +54,20 @@ def _doctor(root: Path) -> int:
     return 0 if all(item["ok"] for item in checks) else 1
 
 
+def _load_local_env(path: Path) -> None:
+    if not path.is_file():
+        return
+    allowed = {"FEISHU_APP_ID", "FEISHU_APP_SECRET", "FEISHU_CHAT_NAME"}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if key in allowed:
+            os.environ.setdefault(key, value.strip().strip("\"").strip("'"))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="signal-bloom", description="Evidence-first content workflow")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -64,6 +80,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--provider", choices=("codex", "demo"), default="codex")
     run.add_argument("--force", action="store_true", help="replace known output files in the target folder")
     run.add_argument("--timeout", type=int, default=900, help="seconds allowed for each Codex stage")
+    sync = subparsers.add_parser("sync-feishu", help="send one verified daily digest to Feishu")
+    sync.add_argument("--output", type=Path, required=True, help="existing daily output directory")
+    sync.add_argument("--chat-name", help="exact Feishu group name")
+    sync.add_argument("--dry-run", action="store_true", help="validate and render without calling Feishu")
     return parser
 
 
@@ -72,6 +92,22 @@ def main(argv: list[str] | None = None) -> int:
     root = project_root()
     if args.command == "doctor":
         return _doctor(root)
+    if args.command == "sync-feishu":
+        _load_local_env(root / ".env")
+        chat_name = args.chat_name or os.environ.get("FEISHU_CHAT_NAME", "SignalBloom 私人资讯")
+        try:
+            result = sync_output(
+                args.output,
+                app_id=os.environ.get("FEISHU_APP_ID", ""),
+                app_secret=os.environ.get("FEISHU_APP_SECRET", ""),
+                chat_name=chat_name,
+                dry_run=args.dry_run,
+            )
+        except (FeishuError, OSError) as exc:
+            print(json.dumps({"status": "failed", "error": str(exc)}, ensure_ascii=False, indent=2), file=sys.stderr)
+            return 2
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     seed = args.seed.resolve()
     seed_value = json.loads(seed.read_text(encoding="utf-8"))
     if seed_value.get("edition_date") != args.date:

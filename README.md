@@ -15,6 +15,7 @@ SignalBloom 是一个以 Codex Harness 为执行内核的 AI 行业内容工作�
 - 独立生成公众号与产品经理平台长文。
 - 执行字数、来源数、图片数、表格、跨平台相似度和 Human Writing 检查。
 - 将用户本地稿件和配图组装成 React 投稿前预览页。
+- 将通过研究校验的当日资讯同步到指定的私人飞书群。
 - 为每个阶段保留状态、输入哈希、事件流和交付文件哈希。
 
 ## 工作流
@@ -143,6 +144,7 @@ outputs/YYYY-MM-DD/
 ├── wechat_article.md
 ├── woshipm_article.md
 ├── qa_report.json
+├── feishu_delivery.json # 只在成功同步飞书后生成
 ├── review.html           # 今日资讯、双平台文章与质量门
 ├── images/
 └── events/
@@ -156,6 +158,42 @@ PYTHONPATH=src python3 scripts/recheck_output.py outputs/YYYY-MM-DD --build-prev
 
 `recheck_output.py` 会默认查找 `~/.codex/skills/human-writing/scripts/check_prose.py`。该个人 Skill 不随仓库分发；新环境需要自行安装 Human Writing Skill，或通过 `--prose-checker /absolute/path/to/check_prose.py` 指定兼容检查器。检查器缺失时任务会报错，避免把未检查稿件标记为通过。
 
+## 同步到私人飞书群
+
+第一版只同步“今日资讯”，不会同步两篇平台文章、配图、Prompt 或 Codex 日志。飞书中收到一条富文本日报，包含总览、全部入选资讯、产品判断、风险边界、核验状态和原始来源。
+
+飞书自建应用需要开启机器人能力，并至少拥有以下应用身份权限：
+
+- 获取群组信息 `im:chat:readonly`
+- 以应用身份发消息 `im:message:send_as_bot`
+
+发布应用后，在飞书桌面客户端或手机端将机器人加入目标私人群。飞书网页版可能只显示群机器人说明，不显示“添加机器人”按钮。
+
+将本地配置模板复制为 `.env`，再填入自己的 App ID 和 App Secret：
+
+```bash
+cp .env.example .env
+```
+
+`.env` 已被 Git 忽略。不要把真实 App Secret 发到聊天、写进代码或提交到仓库。
+
+先只校验当天结果，不连接飞书：
+
+```bash
+PYTHONPATH=src python3 -m ai_news_agent sync-feishu \
+  --output outputs/YYYY-MM-DD \
+  --dry-run
+```
+
+确认无误后正式同步：
+
+```bash
+PYTHONPATH=src python3 -m ai_news_agent sync-feishu \
+  --output outputs/YYYY-MM-DD
+```
+
+命令会按群名称精确查找机器人所在群。成功后在当日输出目录写入私有回执 `feishu_delivery.json`；同一消息日常重复运行会按回执与飞书 UUID 跳过。如果进程恰好在发送与回执确认之间中断，命令会停止自动重试，要求先到目标群人工确认，避免盲目重发。
+
 ## 数据隐私边界
 
 公开仓库只保存功能代码、Schema、Prompt、虚构结构示例和已授权的 UI 素材。以下内容默认只属于运行它的当前用户：
@@ -164,6 +202,7 @@ PYTHONPATH=src python3 scripts/recheck_output.py outputs/YYYY-MM-DD --build-prev
 - 研究证据包、资讯总览和选题。
 - 平台稿件、配图、质检报告与预览包。
 - Manifest、事件流、日志和编辑批注。
+- 飞书凭据、目标群信息和投递回执。
 
 这些文件被 `.gitignore` 阻止进入版本库。不要使用 `git add -f` 强制上传。“今日资讯”结果同样属于用户本地生成内容；公开仓库不包含 `research_bundle.json`、用户资讯结果或内置真实样例。预览构建也不会把用户内容回写到 `review-site/public/`。
 
