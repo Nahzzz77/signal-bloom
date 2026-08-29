@@ -9,7 +9,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .normalize import canonicalize_url, normalize_and_rank
-from .preview import install_prebuilt_preview, write_edition_summary
+from .preview import install_prebuilt_preview, write_archive_index, write_edition_summary
 from .provider import GenerationProvider
 from .quality import build_qa_report, validate_research_bundle
 from .render import render_article, render_digest, render_review_html, write_json
@@ -177,6 +177,8 @@ class NewsPipeline:
             }
         )
         write_json(output_dir / "manifest.json", manifest)
+        if output_dir == (self.root / "outputs" / edition_date).resolve():
+            write_archive_index(output_dir.parent)
         return manifest
 
     def run(
@@ -416,4 +418,6 @@ class NewsPipeline:
                 }
             )
             write_json(output_dir / "manifest.json", manifest)
+            if output_dir == (self.root / "outputs" / edition_date).resolve():
+                write_archive_index(output_dir.parent)
             raise

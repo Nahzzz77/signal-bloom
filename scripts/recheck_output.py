@@ -21,7 +21,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from ai_news_agent.normalize import canonicalize_url
-from ai_news_agent.preview import install_prebuilt_preview, write_edition_summary
+from ai_news_agent.preview import install_prebuilt_preview, write_archive_index, write_edition_summary
 from ai_news_agent.quality import build_qa_report
 from ai_news_agent.render import render_review_html, write_json
 
@@ -369,6 +369,8 @@ def main() -> int:
         )
     manifest["artifacts"] = artifacts
     write_json(output_dir / "manifest.json", manifest)
+    if output_dir == (project_root / "outputs" / manifest["edition_date"]).resolve():
+        write_archive_index(output_dir.parent)
 
     print(
         json.dumps(

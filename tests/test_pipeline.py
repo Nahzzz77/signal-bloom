@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from ai_news_agent.pipeline import NewsPipeline
-from ai_news_agent.preview import install_prebuilt_preview
+from ai_news_agent.preview import install_prebuilt_preview, write_archive_index
 from ai_news_agent.provider import DemoProvider
 
 
@@ -36,6 +36,47 @@ class BlockedDemoProvider(DemoProvider):
 
 
 class PipelineTests(unittest.TestCase):
+    def test_archive_indexes_only_complete_editions_in_reverse_date_order(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            outputs = Path(temp)
+
+            def add_edition(edition_date: str, *, status: str = "completed") -> Path:
+                edition = outputs / edition_date
+                (edition / "articles").mkdir(parents=True)
+                for relative in (
+                    "review.html",
+                    "research_bundle.json",
+                    "articles/wechat.md",
+                    "articles/woshipm.md",
+                ):
+                    (edition / relative).write_text("test", encoding="utf-8")
+                (edition / "edition.json").write_text(
+                    json.dumps({"edition_date": edition_date}), encoding="utf-8"
+                )
+                (edition / "manifest.json").write_text(
+                    json.dumps({"edition_date": edition_date, "status": status}),
+                    encoding="utf-8",
+                )
+                return edition
+
+            add_edition("2099-01-01")
+            add_edition("2099-01-02", status="needs_revision")
+            incomplete = add_edition("2099-01-03")
+            (incomplete / "articles" / "wechat.md").unlink()
+            failed = add_edition("2099-01-04", status="failed")
+            self.assertTrue(failed.is_dir())
+
+            archive = write_archive_index(outputs)
+
+            self.assertEqual(archive, {"editions": ["2099-01-02", "2099-01-01"]})
+            self.assertEqual(
+                json.loads((outputs / "archive.json").read_text(encoding="utf-8")),
+                archive,
+            )
+            for name in ("index.html", "review.html"):
+                landing = (outputs / name).read_text(encoding="utf-8")
+                self.assertIn("./2099-01-02/review.html", landing)
+
     def test_blocked_article_is_recorded_and_stops_completion(self) -> None:
         root = Path(__file__).resolve().parents[1]
         seed = {

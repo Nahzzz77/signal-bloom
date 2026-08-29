@@ -2,7 +2,72 @@ from __future__ import annotations
 
 import json
 import shutil
+from datetime import date
 from pathlib import Path
+
+
+def write_archive_index(outputs_dir: Path) -> dict:
+    """Index complete private editions and point the stable local entry at the latest one."""
+
+    outputs_dir.mkdir(parents=True, exist_ok=True)
+    editions = []
+    required = (
+        "review.html",
+        "edition.json",
+        "manifest.json",
+        "research_bundle.json",
+        "articles/wechat.md",
+        "articles/woshipm.md",
+    )
+    for candidate in outputs_dir.iterdir():
+        if not candidate.is_dir():
+            continue
+        try:
+            if date.fromisoformat(candidate.name).isoformat() != candidate.name:
+                continue
+        except ValueError:
+            continue
+        if not all((candidate / relative).is_file() for relative in required):
+            continue
+        try:
+            edition = json.loads((candidate / "edition.json").read_text(encoding="utf-8"))
+            manifest = json.loads((candidate / "manifest.json").read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if (
+            edition.get("edition_date") == candidate.name
+            and manifest.get("edition_date") == candidate.name
+            and manifest.get("status") in {"completed", "needs_revision"}
+        ):
+            editions.append(candidate.name)
+
+    editions.sort(reverse=True)
+    payload = {"editions": editions}
+    (outputs_dir / "archive.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    if editions:
+        target = f"./{editions[0]}/review.html"
+        redirect = f'<meta http-equiv="refresh" content="0; url={target}">'
+        body = f'<p>正在打开最新一期。<a href="{target}">点击继续</a></p>'
+    else:
+        redirect = ""
+        body = "<p>尚未生成可查看的本地日报。</p>"
+    landing = (
+        "<!doctype html>\n"
+        '<html lang="zh-CN"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        f"{redirect}<title>SignalBloom 历史日报</title>"
+        "<style>body{margin:0;min-height:100vh;display:grid;place-items:center;"
+        "background:#000;color:#fff;font:16px/1.7 system-ui,sans-serif}"
+        "a{color:inherit}</style></head><body>"
+        f"{body}</body></html>\n"
+    )
+    for name in ("index.html", "review.html"):
+        (outputs_dir / name).write_text(landing, encoding="utf-8")
+    return payload
 
 
 def write_edition_summary(

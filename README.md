@@ -15,6 +15,7 @@ SignalBloom 是一个以 Codex Harness 为执行内核的 AI 行业内容工作�
 - 独立生成公众号与产品经理平台长文。
 - 执行字数、来源数、图片数、表格、跨平台相似度和 Human Writing 检查。
 - 将用户本地稿件和配图组装成 React 投稿前预览页。
+- 自动维护本地日期归档，通过同一个入口切换查看历史资讯和文章。
 - 将通过研究校验的当日资讯同步到指定的私人飞书群。
 - 为每个阶段保留状态、输入哈希、事件流和交付文件哈希。
 
@@ -133,7 +134,7 @@ cd review-site && npm run build
 
 ## 输出结构
 
-每日结果写入 `outputs/YYYY-MM-DD/`。这些文件是本地业务产物，默认不提交到 Git。
+每日结果写入 `outputs/YYYY-MM-DD/`。这些文件是本地业务产物，默认不提交到 Git。`outputs/index.html`、`outputs/review.html` 和 `outputs/archive.json` 只记录本地入口与可用日期，同样不会提交。
 
 ```text
 outputs/YYYY-MM-DD/
@@ -148,6 +149,20 @@ outputs/YYYY-MM-DD/
 ├── review.html           # 今日资讯、双平台文章与质量门
 ├── images/
 └── events/
+```
+
+### 查看本地历史日报
+
+```bash
+./scripts/serve_review.sh
+```
+
+固定入口是 `http://127.0.0.1:4173/review.html`。它会打开最新一期，导航栏中的“历史日期”可以切换到昨天或更早的资讯与两篇文章。每日流水线结束后会自动刷新日期索引，不需要复制文章或维护数据库。
+
+也可以直接指定一期：
+
+```bash
+./scripts/serve_review.sh YYYY-MM-DD
 ```
 
 编辑修改两篇 `*.final.md` 后，可以重新执行质检并刷新预览页：

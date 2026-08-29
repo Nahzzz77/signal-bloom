@@ -20,6 +20,7 @@ type EditionSummary = {
   edition_date: string
   articles: { wechat: EditionArticle; woshipm: EditionArticle }
 }
+type ArchiveIndex = { editions: string[] }
 type ClaimStatus = 'supported' | 'partial' | 'conflicting' | 'unverified'
 type ResearchClaim = { text: string; status: ClaimStatus; evidence_urls: string[] }
 type ResearchItem = {
@@ -133,6 +134,45 @@ function sourceHost(url: string) {
   }
 }
 
+function isArchiveIndex(value: unknown): value is ArchiveIndex {
+  if (!value || typeof value !== 'object') return false
+  const archive = value as Partial<ArchiveIndex>
+  return Array.isArray(archive.editions)
+    && archive.editions.every((edition) => /^\d{4}-\d{2}-\d{2}$/.test(edition))
+}
+
+function formatEditionDate(value: string) {
+  const [year, month, day] = value.split('-')
+  return `${year}年${Number(month)}月${Number(day)}日`
+}
+
+function ArchivePicker({
+  editions,
+  current,
+  onChange,
+}: {
+  editions: string[]
+  current: string
+  onChange: (edition: string) => void
+}) {
+  if (!editions.length) return null
+  return (
+    <label className="flex items-center gap-2 rounded-full border border-white/20 px-4 py-2 text-white/70">
+      <span className="text-xs font-medium uppercase tracking-[0.14em]">历史日期</span>
+      <select
+        aria-label="查看历史日期"
+        value={editions.includes(current) ? current : editions[0]}
+        onChange={(event) => onChange(event.target.value)}
+        className="max-w-[9.5rem] cursor-pointer bg-black text-sm text-white outline-none"
+      >
+        {editions.map((edition) => (
+          <option key={edition} value={edition}>{formatEditionDate(edition)}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 function formatEventTime(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
@@ -146,7 +186,7 @@ function formatEventTime(value: string) {
 
 function displayDigestTitle(value: string) {
   const normalized = value.replace(/^AI\s*资讯日报\s*[｜|:：-]?\s*/i, '')
-  return normalized === value ? value : `SignalBloom 今日信号｜${normalized}`
+  return normalized === value ? value : `SignalBloom 本期信号｜${normalized}`
 }
 
 function itemStatus(item: ResearchItem): ClaimStatus {
@@ -319,7 +359,7 @@ function TodayContent({ go, research }: { go: (view: View) => void; research: Re
         <div className="flex flex-col gap-8 border-b border-black/15 pb-12 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="mb-5 text-xs font-semibold uppercase tracking-[0.24em] text-black/45">{editionDate.replace(/-/g, '.')} · 本地内容工作台</p>
-            <h2 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">先看今天发生了什么，再决定写什么</h2>
+            <h2 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">先看本期发生了什么，再决定写什么</h2>
           </div>
           <p className="max-w-md text-base leading-8 text-black/55">SignalBloom 先交付去重、排序和核验后的资讯结果，两篇平台文章是这份研究包的下游产物。</p>
         </div>
@@ -327,7 +367,7 @@ function TodayContent({ go, research }: { go: (view: View) => void; research: Re
         {research && (
           <article className="mt-10 grid gap-10 bg-black p-7 text-white md:grid-cols-[1fr_auto] md:items-end md:p-10">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">今日资讯 · {research.items.length} 条入选 · {researchSources} 个来源</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">本期资讯 · {research.items.length} 条入选 · {researchSources} 个来源</p>
               <h3 className="mt-6 max-w-4xl text-3xl font-semibold leading-tight tracking-tight md:text-5xl">{displayDigestTitle(research.digest_title)}</h3>
               <p className="mt-6 max-w-4xl text-base leading-8 text-white/60">{research.executive_summary}</p>
             </div>
@@ -362,7 +402,7 @@ function TodayContent({ go, research }: { go: (view: View) => void; research: Re
         </div>
 
         <div className="mt-20 border-t border-black/15 pt-10">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-black/40">今日处理链路</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-black/40">本期处理链路</p>
           <p className="mt-5 text-xl font-medium leading-relaxed md:text-3xl">人工提供线索 → 去重与筛选 → 事实核验 → 平台选题 → Human Writing 长文 → 配图与预览</p>
         </div>
       </div>
@@ -421,8 +461,8 @@ function DailyNews({ state, go, onRetry }: { state: ResearchState; go: (view: Vi
       <div className="mx-auto max-w-6xl">
         <header className="grid gap-10 border-b border-black/15 pb-14 lg:grid-cols-[0.7fr_1.3fr] lg:gap-20">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/45">{bundle.edition_date.replace(/-/g, '.')} · 今日资讯</p>
-            <h1 className="mt-6 text-5xl font-semibold leading-[0.95] tracking-tight md:text-7xl">今天搜到了什么</h1>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/45">{bundle.edition_date.replace(/-/g, '.')} · 本期资讯</p>
+            <h1 className="mt-6 text-5xl font-semibold leading-[0.95] tracking-tight md:text-7xl">这期搜到了什么</h1>
           </div>
           <div className="lg:pt-9">
             <h2 className="text-2xl font-semibold leading-tight tracking-tight md:text-4xl">{displayDigestTitle(bundle.digest_title)}</h2>
@@ -715,6 +755,7 @@ export default function App() {
   const [view, setView] = useState<View>('home')
   const [researchState, setResearchState] = useState<ResearchState>({ status: 'loading' })
   const [researchRequest, setResearchRequest] = useState(0)
+  const [archive, setArchive] = useState<ArchiveIndex | null>(null)
 
   useEffect(() => {
     const mountTimer = window.setTimeout(() => setMounted(true), 100)
@@ -753,6 +794,20 @@ export default function App() {
     return () => { active = false }
   }, [researchRequest])
 
+  useEffect(() => {
+    let active = true
+    fetch(new URL('../archive.json', window.location.href), { cache: 'no-store' })
+      .then((response) => {
+        if (!response.ok) throw new Error('Unable to load archive index')
+        return response.json() as Promise<unknown>
+      })
+      .then((value) => {
+        if (active && isArchiveIndex(value)) setArchive(value)
+      })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [])
+
   const navigate = (next: View) => {
     setMenuOpen(false)
     setView(next)
@@ -761,11 +816,19 @@ export default function App() {
 
   const navItems: Array<{ label: string; view: View }> = [
     { label: '内容工作台', view: 'home' },
-    { label: '今日资讯', view: 'news' },
+    { label: '本期资讯', view: 'news' },
     { label: '公众号预览', view: 'story' },
     { label: '产品经理预览', view: 'collection' },
     { label: '质量门说明', view: 'inquire' },
   ]
+  const pathEdition = window.location.pathname.match(/\/(\d{4}-\d{2}-\d{2})\//)?.[1] ?? ''
+  const currentEdition = researchState.status === 'ready'
+    ? researchState.data.edition_date
+    : pathEdition
+  const openEdition = (edition: string) => {
+    if (!archive?.editions.includes(edition) || edition === currentEdition) return
+    window.location.assign(new URL(`../${edition}/review.html`, window.location.href))
+  }
   const enter = mounted ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'
 
   return (
@@ -773,14 +836,16 @@ export default function App() {
       <nav className={`fixed left-0 top-0 z-50 w-full transition-all duration-500 ${scrolled || view !== 'home' ? 'bg-black/90 backdrop-blur-md' : 'bg-transparent'}`}>
         <div className="mx-auto flex h-16 max-w-[1440px] items-center justify-between px-6 md:h-20 md:px-10">
           <a href="#" onClick={(event) => { event.preventDefault(); navigate('home') }} className={`z-50 text-xl font-semibold tracking-tight text-white transition-all duration-700 md:text-2xl ${enter}`} style={{ transitionTimingFunction: entrance }}>SignalBloom</a>
-          <button
-            type="button"
-            onClick={() => setMenuOpen((value) => !value)}
-            className={`hidden items-center gap-2 rounded-full border border-white/20 px-5 py-2 text-sm text-white/90 transition-all duration-700 hover:bg-white/10 md:flex ${enter}`}
-            style={{ transitionDelay: mounted ? '200ms' : '0ms', transitionTimingFunction: entrance }}
-          >
-            {menuOpen ? '关闭' : '查看内容'}
-          </button>
+          <div className={`hidden items-center gap-3 transition-all duration-700 md:flex ${enter}`} style={{ transitionDelay: mounted ? '200ms' : '0ms', transitionTimingFunction: entrance }}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((value) => !value)}
+              className="rounded-full border border-white/20 px-5 py-2 text-sm text-white/90 transition hover:bg-white/10"
+            >
+              {menuOpen ? '关闭' : '查看内容'}
+            </button>
+            <ArchivePicker editions={archive?.editions ?? []} current={currentEdition} onChange={openEdition} />
+          </div>
           <Flower2 aria-label="SignalBloom" className={`z-50 hidden h-8 w-8 text-white transition-all duration-700 md:block ${enter}`} strokeWidth={1.6} style={{ transitionDelay: mounted ? '400ms' : '0ms', transitionTimingFunction: entrance }} />
           <button
             type="button"
@@ -808,6 +873,11 @@ export default function App() {
               {item.label}
             </a>
           ))}
+          {archive && archive.editions.length > 0 && (
+            <div className={`mt-4 transition-all duration-[600ms] ${menuOpen ? 'translate-y-0 opacity-100' : 'translate-y-6 opacity-0'}`} style={{ transitionDelay: menuOpen ? `${150 + navItems.length * 80}ms` : '0ms', transitionTimingFunction: overlayEase }}>
+              <ArchivePicker editions={archive.editions} current={currentEdition} onChange={openEdition} />
+            </div>
+          )}
         </div>
       </div>
 
