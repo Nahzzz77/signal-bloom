@@ -63,6 +63,14 @@ def render_digest(bundle: dict) -> str:
 
 
 def render_article(article: dict) -> str:
+    if article.get("status") == "blocked":
+        reason = article.get("blocking_reason") or "当前阶段未生成可审核正文。"
+        missing = article.get("missing_evidence") or []
+        lines = ["# 本轮稿件未生成", "", "当前稿件被质量门阻塞，禁止发布。", "", f"阻塞原因 {reason}"]
+        if missing:
+            lines.extend(["", "需要补充", ""])
+            lines.extend(f"- {item}" for item in missing)
+        return "\n".join(lines).strip() + "\n"
     lines = [f"# {article['title']}", ""]
     if article.get("subtitle"):
         lines.extend([article["subtitle"], ""])
@@ -89,13 +97,13 @@ def _safe_link(url: str) -> str:
 
 
 def _article_panel(title: str, article: dict, qa: dict) -> str:
-    body = html.escape(article.get("body_markdown", ""))
+    body = html.escape(str(article.get("body_markdown") or "当前没有可审核正文。"))
     sources = "".join(f"<li>{_safe_link(url)}</li>" for url in article.get("source_urls", []))
     return f"""
     <section class="panel">
       <div class="eyebrow">{html.escape(title)}</div>
-      <h2>{html.escape(article.get('title', ''))}</h2>
-      <p class="subtitle">{html.escape(article.get('subtitle', ''))}</p>
+      <h2>{html.escape(str(article.get('title') or '本轮稿件未生成'))}</h2>
+      <p class="subtitle">{html.escape(str(article.get('subtitle') or ''))}</p>
       <pre class="article">{body}</pre>
       <h3>关键来源</h3><ul>{sources}</ul>
       <h3>机器质检</h3><pre>{html.escape(json.dumps(qa, ensure_ascii=False, indent=2))}</pre>

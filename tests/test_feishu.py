@@ -79,10 +79,14 @@ def write_output(output_dir: Path, *, errors: list[dict] | None = None) -> None:
     output_dir.mkdir()
     bundle_path = output_dir / "research_bundle.json"
     bundle_path.write_text(json.dumps(bundle(), ensure_ascii=False), encoding="utf-8")
-    (output_dir / "qa_report.json").write_text(
-        json.dumps({"research": {"errors": errors or []}}, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    qa = {
+        "passed": not errors,
+        "error_count": len(errors or []),
+        "warning_count": 0,
+        "research": {"errors": errors or []},
+    }
+    qa_path = output_dir / "qa_report.json"
+    qa_path.write_text(json.dumps(qa, ensure_ascii=False), encoding="utf-8")
     (output_dir / "manifest.json").write_text(
         json.dumps(
             {
@@ -90,7 +94,11 @@ def write_output(output_dir: Path, *, errors: list[dict] | None = None) -> None:
                     {
                         "path": "research_bundle.json",
                         "sha256": hashlib.sha256(bundle_path.read_bytes()).hexdigest(),
-                    }
+                    },
+                    {
+                        "path": "qa_report.json",
+                        "sha256": hashlib.sha256(qa_path.read_bytes()).hexdigest(),
+                    },
                 ]
             }
         ),
@@ -130,6 +138,24 @@ class FeishuTests(unittest.TestCase):
             write_output(output_dir, errors=[{"code": "bad_claim"}])
             with patch("ai_news_agent.feishu.get_tenant_access_token") as get_token:
                 with self.assertRaisesRegex(FeishuError, "拒绝同步"):
+                    sync_output(
+                        output_dir,
+                        app_id="app",
+                        app_secret="secret",
+                        chat_name="SignalBloom 私人资讯",
+                    )
+                get_token.assert_not_called()
+
+    def test_sync_output_rejects_article_qa_errors_before_network(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            output_dir = Path(temp) / "output"
+            write_output(output_dir)
+            qa_path = output_dir / "qa_report.json"
+            qa = json.loads(qa_path.read_text(encoding="utf-8"))
+            qa.update({"passed": False, "error_count": 1})
+            qa_path.write_text(json.dumps(qa, ensure_ascii=False), encoding="utf-8")
+            with patch("ai_news_agent.feishu.get_tenant_access_token") as get_token:
+                with self.assertRaisesRegex(FeishuError, "日报 QA 未通过"):
                     sync_output(
                         output_dir,
                         app_id="app",

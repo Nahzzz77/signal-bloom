@@ -215,12 +215,18 @@ def sync_output(
         raise FeishuError("缺少本地文件：research_bundle.json")
     bundle_bytes = bundle_path.read_bytes()
     bundle = _decode_json(bundle_path, bundle_bytes)
-    qa = _load_json(output_dir / "qa_report.json")
+    qa_path = output_dir / "qa_report.json"
+    qa_bytes = qa_path.read_bytes() if qa_path.is_file() else b""
+    qa = _decode_json(qa_path, qa_bytes) if qa_bytes else _load_json(qa_path)
     research_errors = qa.get("research", {}).get("errors")
     if not isinstance(research_errors, list):
         raise FeishuError("qa_report.json 缺少 research.errors 校验结果")
     if research_errors:
         raise FeishuError(f"资讯研究仍有 {len(research_errors)} 个硬错误，拒绝同步到飞书")
+    if qa.get("passed") is not True or int(qa.get("error_count", 0)) != 0:
+        raise FeishuError(
+            f"日报 QA 未通过（{qa.get('error_count', '未知')} 个硬错误），拒绝同步到飞书"
+        )
     bundle_hash = hashlib.sha256(bundle_bytes).hexdigest()
     manifest = _load_json(output_dir / "manifest.json")
     recorded_hash = next(
@@ -233,6 +239,16 @@ def sync_output(
     )
     if recorded_hash != bundle_hash:
         raise FeishuError("当前资讯包与 Manifest 中已质检的版本不一致，请先重新运行质检")
+    recorded_qa_hash = next(
+        (
+            artifact.get("sha256")
+            for artifact in manifest.get("artifacts", [])
+            if artifact.get("path") == "qa_report.json"
+        ),
+        None,
+    )
+    if recorded_qa_hash and recorded_qa_hash != hashlib.sha256(qa_bytes).hexdigest():
+        raise FeishuError("当前 QA 报告与 Manifest 中已质检的版本不一致，请先重新运行质检")
     post = build_post(bundle)
     post_bytes = json.dumps(post, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode(
         "utf-8"

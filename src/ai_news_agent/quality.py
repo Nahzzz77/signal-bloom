@@ -125,6 +125,13 @@ def validate_article(
     requirements: dict | None = None,
 ) -> dict:
     requirements = requirements or {}
+    if article.get("status") == "blocked":
+        reason = str(article.get("blocking_reason") or "模型或上游阶段阻塞")
+        return {
+            "errors": [{"code": "article_blocked", "location": target, "reason": reason}],
+            "warnings": [],
+            "metrics": {"chinese_characters": 0, "source_count": 0},
+        }
     body = str(article.get("body_markdown", ""))
     reviewable_prose = "\n".join(
         str(article.get(field_name, ""))
@@ -236,8 +243,16 @@ def build_qa_report(
         for platform, article in articles.items()
     }
     if "wechat" in articles and "woshipm" in articles:
-        left = re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", articles["wechat"].get("body_markdown", "").lower())
-        right = re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", articles["woshipm"].get("body_markdown", "").lower())
+        left = re.sub(
+            r"[^0-9a-z\u4e00-\u9fff]+",
+            "",
+            str(articles["wechat"].get("body_markdown") or "").lower(),
+        )
+        right = re.sub(
+            r"[^0-9a-z\u4e00-\u9fff]+",
+            "",
+            str(articles["woshipm"].get("body_markdown") or "").lower(),
+        )
         similarity = round(SequenceMatcher(None, left, right).ratio(), 4) if left and right else 0.0
         if min(len(left), len(right)) >= 100 and similarity >= 0.72:
             issue = {

@@ -11,7 +11,12 @@ from zoneinfo import ZoneInfo
 from .normalize import canonicalize_url, normalize_and_rank
 from .preview import install_prebuilt_preview, write_archive_index, write_edition_summary
 from .provider import GenerationProvider
-from .quality import build_qa_report, validate_research_bundle
+from .quality import (
+    build_qa_report,
+    collect_evidence_urls,
+    validate_article,
+    validate_research_bundle,
+)
 from .render import render_article, render_digest, render_review_html, write_json
 
 
@@ -53,15 +58,58 @@ def _prompt_with_context(base: str, heading: str, value: object) -> str:
 
 def _placeholder_article(platform_name: str, error: str) -> dict:
     return {
+        "status": "blocked",
         "platform": platform_name,
-        "title": "本轮编辑底稿未生成",
-        "subtitle": "请先处理上游错误后重跑",
-        "body_markdown": f"本轮没有生成可审核正文。错误信息为 {error}",
-        "summary": "当前阶段失败，禁止发布。",
+        "title": None,
+        "subtitle": None,
+        "body_markdown": None,
+        "summary": None,
         "source_urls": [],
-        "ai_disclosure_note": "当前是失败占位内容，禁止对外发布。",
-        "editor_notes": ["处理错误并重新运行对应阶段。"],
+        "ai_disclosure_note": None,
+        "editor_notes": [],
+        "blocking_reason": error,
+        "missing_evidence": ["处理错误并重新运行对应阶段。"],
     }
+
+
+def _has_long_form_material(bundle: dict) -> bool:
+    """Return whether the bundle has enough grounded material for a long draft.
+
+    A third-party investigation is useful when available, but it is not a
+    prerequisite for a factual platform draft.  Primary releases, documented
+    product behavior, and clearly labelled editorial analysis can support a
+    long article when there are enough distinct claims to develop.
+    """
+
+    usable_items = 0
+    usable_claims = 0
+    for item in bundle.get("items", []):
+        claims = [
+            claim
+            for claim in item.get("claims", [])
+            if claim.get("status") in {"supported", "partial"}
+            and claim.get("evidence_urls")
+        ]
+        if item.get("source_urls") and claims:
+            usable_items += 1
+            usable_claims += len(claims)
+    return usable_items >= 4 and usable_claims >= 6
+
+
+def _repair_prompt(base_prompt: str, article_context: dict, current: dict, issues: dict) -> str:
+    instructions = """
+这是一次机器质检后的编辑返修。请重新输出完整 ArticleResult JSON，不要只给修改片段。
+保留原 Evidence Bundle 中能证明的事实，修正下面列出的硬错误。当前材料已经达到长文门槛时必须输出至少 6000 个汉字的正文；允许使用明确标注的编辑判断、产品流程推演和风险说明，但不得捏造案例、测试、数字、日期、引语或开放范围。
+文章必须保留可核验来源，正文和标题清除冒号、破折号、翻案句及模型黑话。表达边界时直接陈述事实，不要写“不是……而是……”“表面上……实际……”等变体。
+如果确实无法在事实边界内修复，才返回 blocked，并具体说明缺口。材料中没有独立调查不等于自动 blocked。
+""".strip()
+    value = {
+        "article_context": article_context,
+        "current_result": current,
+        "quality_errors": issues.get("errors", []),
+        "quality_warnings": issues.get("warnings", []),
+    }
+    return _prompt_with_context(base_prompt + "\n\n" + instructions, "返修输入", value)
 
 
 class NewsPipeline:
@@ -381,6 +429,99 @@ class NewsPipeline:
                             raise ValueError(
                                 f"{target} ready result missing fields: {', '.join(missing)}"
                             )
+
+                    # A model can conservatively block a draft, or miss a
+                    # mechanical prose rule even when the evidence bundle is
+                    # large enough to support the requested article.  Give it
+                    # one explicit, evidence-bound repair pass before turning
+                    # the result into a blocking placeholder.  DemoProvider is
+                    # intentionally left deterministic for tests and examples.
+                    repair_report = None
+                    if provider_name != "demo" and _has_long_form_material(bundle):
+                        if generated.get("status") == "blocked":
+                            repair_report = {
+                                "errors": [
+                                    {
+                                        "code": "provider_blocked_with_sufficient_material",
+                                        "location": target,
+                                    }
+                                ],
+                                "warnings": [],
+                            }
+                        else:
+                            repair_report = validate_article(
+                                generated,
+                                collect_evidence_urls(bundle),
+                                target,
+                                strict_editorial=True,
+                                requirements=self.platforms_config.get(target, {}),
+                            )
+                        if repair_report["errors"]:
+                            original_generated = generated
+                            retry_output = output_dir / f"{target}_article.retry.json"
+                            retry_events = events_dir / f"{target}.retry.jsonl"
+                            retry_prompt = _repair_prompt(
+                                (self.root / "prompts" / f"{target}.md").read_text(
+                                    encoding="utf-8"
+                                ),
+                                article_context,
+                                original_generated,
+                                repair_report,
+                            )
+                            try:
+                                repaired = self.provider.generate(
+                                    stage=target,
+                                    prompt=retry_prompt,
+                                    schema_path=self.root / "schemas" / "article.schema.json",
+                                    output_path=retry_output,
+                                    events_path=retry_events,
+                                )
+                                repaired_status = repaired.get("status")
+                                if repaired_status not in {"ready", "blocked"}:
+                                    raise ValueError(
+                                        f"{target} repair returned an invalid status"
+                                    )
+                                if repaired_status == "ready":
+                                    required_ready_fields = (
+                                        "title",
+                                        "body_markdown",
+                                        "summary",
+                                        "source_urls",
+                                        "ai_disclosure_note",
+                                        "editor_notes",
+                                    )
+                                    missing = [
+                                        name
+                                        for name in required_ready_fields
+                                        if not repaired.get(name)
+                                    ]
+                                    if missing:
+                                        raise ValueError(
+                                            f"{target} repair missing fields: {', '.join(missing)}"
+                                        )
+                                generated = repaired
+                                if repaired_status == "ready":
+                                    write_json(
+                                        output_dir / f"{target}_article.json", repaired
+                                    )
+                                manifest["stages"][target]["repair"] = {
+                                    "status": repaired_status,
+                                    "error_codes": [
+                                        issue.get("code") for issue in repair_report["errors"]
+                                    ],
+                                }
+                            except Exception as repair_error:
+                                generated = original_generated
+                                manifest["stages"][target]["repair"] = {
+                                    "status": "failed",
+                                    "error_codes": [
+                                        issue.get("code") for issue in repair_report["errors"]
+                                    ],
+                                    "error": str(repair_error),
+                                }
+                            finally:
+                                if retry_output.is_file():
+                                    retry_output.unlink()
                 except Exception as exc:
                     self._stage_finish(
                         manifest, target, output_dir, status="failed", error=exc

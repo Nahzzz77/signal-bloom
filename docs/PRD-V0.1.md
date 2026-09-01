@@ -261,8 +261,8 @@ AIHOT 的公开 Agent 接入页允许个人非商业、公益非商业和组织�
 | U20 标准化去重 | Python | CandidateItem 列表 | `normalized_items.json` | 数据结构不合法则阻塞研究 |
 | U30 研究与筛选 | Codex | 标准化资讯、研究 Prompt、Schema | `research_bundle.json`、事件 JSONL | 本次调用失败则记录并结束；自动重试进入 V0.2 |
 | U40 日报渲染 | Python | ResearchBundle | `daily_digest.md` | 缺关键字段则阻塞 |
-| U50 公众号写作 | Codex + Human Writing | ResearchBundle、公众号选题、平台规则 | 公众号 ArticleResult JSON / Markdown、事件 JSONL | 证据不足时记录 `blocked`，其他失败单独记录，不影响另一平台 |
-| U60 产品经理平台写作 | Codex + Human Writing | ResearchBundle、对应选题、平台规则 | Woshipm ArticleResult JSON / Markdown、事件 JSONL | 证据不足时记录 `blocked`，其他失败单独记录，不影响另一平台 |
+| U50 公众号写作 | Codex + Human Writing | ResearchBundle、公众号选题、平台规则 | 公众号 ArticleResult JSON / Markdown、事件 JSONL | 证据不足时记录 `blocked`；材料足够但触发机械规则时自动返修一次，仍失败才阻断 |
+| U60 产品经理平台写作 | Codex + Human Writing | ResearchBundle、对应选题、平台规则 | Woshipm ArticleResult JSON / Markdown、事件 JSONL | 证据不足时记录 `blocked`；材料足够但触发机械规则时自动返修一次，仍失败才阻断 |
 | U70 质量检查 | Python | 所有已有交付物 | `qa_report.json` | 输出阻塞项，不掩盖失败 |
 | U80 审核包渲染 | Python + React/Vite | ResearchBundle、Manifest、日报、文章、配图、QA | `review.html`（含今日资讯视图）、`assets/`、`articles/` | React 构建失败时保留 `review-legacy.html` 供排错 |
 
