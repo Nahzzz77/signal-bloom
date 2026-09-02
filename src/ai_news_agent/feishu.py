@@ -223,10 +223,9 @@ def sync_output(
         raise FeishuError("qa_report.json 缺少 research.errors 校验结果")
     if research_errors:
         raise FeishuError(f"资讯研究仍有 {len(research_errors)} 个硬错误，拒绝同步到飞书")
-    if qa.get("passed") is not True or int(qa.get("error_count", 0)) != 0:
-        raise FeishuError(
-            f"日报 QA 未通过（{qa.get('error_count', '未知')} 个硬错误），拒绝同步到飞书"
-        )
+    # Feishu receives the research digest only.  Article and Human Writing
+    # errors are kept in the QA report for the local editorial workflow, but
+    # they must not block delivery of an otherwise verified news bundle.
     bundle_hash = hashlib.sha256(bundle_bytes).hexdigest()
     manifest = _load_json(output_dir / "manifest.json")
     recorded_hash = next(

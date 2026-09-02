@@ -75,15 +75,26 @@ def bundle() -> dict:
     }
 
 
-def write_output(output_dir: Path, *, errors: list[dict] | None = None) -> None:
+def write_output(
+    output_dir: Path,
+    *,
+    errors: list[dict] | None = None,
+    article_errors: list[dict] | None = None,
+) -> None:
     output_dir.mkdir()
     bundle_path = output_dir / "research_bundle.json"
     bundle_path.write_text(json.dumps(bundle(), ensure_ascii=False), encoding="utf-8")
+    research_errors = errors or []
+    editorial_errors = article_errors or []
     qa = {
-        "passed": not errors,
-        "error_count": len(errors or []),
+        "passed": not (research_errors or editorial_errors),
+        "error_count": len(research_errors) + len(editorial_errors),
         "warning_count": 0,
-        "research": {"errors": errors or []},
+        "research": {"errors": research_errors},
+        "articles": {
+            "wechat": {"errors": editorial_errors, "warnings": []},
+            "woshipm": {"errors": [], "warnings": []},
+        },
     }
     qa_path = output_dir / "qa_report.json"
     qa_path.write_text(json.dumps(qa, ensure_ascii=False), encoding="utf-8")
@@ -146,22 +157,19 @@ class FeishuTests(unittest.TestCase):
                     )
                 get_token.assert_not_called()
 
-    def test_sync_output_rejects_article_qa_errors_before_network(self) -> None:
+    def test_sync_output_allows_article_qa_errors_for_digest(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             output_dir = Path(temp) / "output"
-            write_output(output_dir)
-            qa_path = output_dir / "qa_report.json"
-            qa = json.loads(qa_path.read_text(encoding="utf-8"))
-            qa.update({"passed": False, "error_count": 1})
-            qa_path.write_text(json.dumps(qa, ensure_ascii=False), encoding="utf-8")
+            write_output(output_dir, article_errors=[{"code": "contrarian_template"}])
             with patch("ai_news_agent.feishu.get_tenant_access_token") as get_token:
-                with self.assertRaisesRegex(FeishuError, "日报 QA 未通过"):
-                    sync_output(
-                        output_dir,
-                        app_id="app",
-                        app_secret="secret",
-                        chat_name="SignalBloom 私人资讯",
-                    )
+                result = sync_output(
+                    output_dir,
+                    app_id="app",
+                    app_secret="secret",
+                    chat_name="SignalBloom 私人资讯",
+                    dry_run=True,
+                )
+                self.assertEqual(result["status"], "dry_run")
                 get_token.assert_not_called()
 
     def test_sync_output_rejects_bundle_changed_after_qa(self) -> None:
