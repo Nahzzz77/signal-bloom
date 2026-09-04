@@ -207,7 +207,7 @@ PYTHONPATH=src python3 -m ai_news_agent sync-feishu \
   --output outputs/YYYY-MM-DD
 ```
 
-命令会按群名称精确查找机器人所在群。成功后在当日输出目录写入私有回执 `feishu_delivery.json`；同一消息日常重复运行会按回执与飞书 UUID 跳过。如果进程恰好在发送与回执确认之间中断，命令会停止自动重试，要求先到目标群人工确认，避免盲目重发。
+命令会按群名称精确查找机器人所在群。成功后在当日输出目录写入私有回执 `feishu_delivery.json`；同一消息日常重复运行会按回执与飞书 UUID 跳过。投递还会在回执检查、发送和写入最终回执之间持有跨进程锁，因此 Codex 备份任务与 macOS `launchd` 同时触发时只会有一个发送者。若进程恰好在发送与回执确认之间中断，命令会停止自动重试，要求先到目标群人工确认，避免盲目重发。
 
 飞书同步只对“今日资讯”本身设门禁。`qa_report.json` 的 `research.errors` 必须为空，且当前 `research_bundle.json` 的 SHA-256 必须与 Manifest 中已质检的版本一致；若 Manifest 记录了 QA 报告哈希，也必须与当前报告一致。公众号、人人都是产品经理文章及 Human Writing 硬检查属于本地编辑交付，不会阻断已通过研究核验的资讯日报。研究错误或版本哈希不一致时，命令仍会在本地拒绝发送，不能手工改状态绕过门禁。
 

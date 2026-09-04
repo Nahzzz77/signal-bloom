@@ -2,13 +2,20 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 from urllib.error import URLError
 
 from ai_news_agent.feishu import FeishuError, _request_json, build_post, find_chat_id, sync_output
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def bundle() -> dict:
@@ -250,6 +257,59 @@ class FeishuTests(unittest.TestCase):
             self.assertEqual(get_token.call_count, 2)
             self.assertEqual(list_chats.call_count, 2)
             send_post.assert_called_once()
+
+    def test_concurrent_deliveries_send_only_once(self) -> None:
+        """The launchd and Codex backup paths may run at the same time."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            output_dir = root / "output"
+            write_output(output_dir)
+            counter = root / "send-count.txt"
+            child = textwrap.dedent(
+                """
+                import sys
+                import time
+                from pathlib import Path
+                from ai_news_agent import feishu
+
+                counter = Path(sys.argv[2])
+                feishu.get_tenant_access_token = lambda app_id, app_secret: "token"
+                feishu.list_chats = lambda token: [{"name": "SignalBloom 私人资讯", "chat_id": "oc_chat"}]
+
+                def send_post(token, chat_id, post, delivery_uuid):
+                    with counter.open("a", encoding="utf-8") as handle:
+                        handle.write("send\\n")
+                    time.sleep(0.25)
+                    return {"message_id": "om_message"}
+
+                feishu.send_post = send_post
+                result = feishu.sync_output(
+                    Path(sys.argv[1]),
+                    app_id="app",
+                    app_secret="secret",
+                    chat_name="SignalBloom 私人资讯",
+                )
+                print(result.get("status"), result.get("skipped", False))
+                """
+            )
+            env = dict(os.environ)
+            env["PYTHONPATH"] = str(ROOT / "src")
+            processes = [
+                subprocess.Popen(
+                    [sys.executable, "-c", child, str(output_dir), str(counter)],
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                for _ in range(2)
+            ]
+            results = [process.communicate(timeout=10) for process in processes]
+
+            self.assertTrue(all(process.returncode == 0 for process in processes), results)
+            self.assertEqual(counter.read_text(encoding="utf-8").splitlines(), ["send"])
+            self.assertTrue(any("succeeded False" in stdout for stdout, _ in results))
+            self.assertTrue(any("succeeded True" in stdout for stdout, _ in results))
 
 
 if __name__ == "__main__":

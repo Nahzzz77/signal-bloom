@@ -5,11 +5,14 @@ import json
 import time
 import uuid
 from collections import Counter
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urlsplit
 from urllib.request import Request, urlopen
+
+import fcntl
 
 
 API_BASE = "https://open.feishu.cn/open-apis"
@@ -214,6 +217,18 @@ def _write_receipt(path: Path, value: dict) -> None:
     temporary.replace(path)
 
 
+@contextmanager
+def _delivery_lock(output_dir: Path):
+    """Serialize all non-dry-run delivery attempts for one edition."""
+    lock_path = output_dir / ".feishu_delivery.lock"
+    with lock_path.open("a+") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
 def sync_output(
     output_dir: Path,
     *,
@@ -283,57 +298,61 @@ def sync_output(
         }
 
     receipt_path = output_dir / "feishu_delivery.json"
-    if not app_id or not app_secret:
-        raise FeishuError("缺少 FEISHU_APP_ID 或 FEISHU_APP_SECRET")
-    token = get_tenant_access_token(app_id, app_secret)
-    chat_id = find_chat_id(list_chats(token), chat_name)
-    if receipt_path.is_file():
-        receipt = _load_json(receipt_path)
-        same_target = receipt.get("app_id") == app_id and receipt.get("chat_id") == chat_id
-        if receipt.get("status") == "sending":
-            raise FeishuError("上一次飞书投递在发送中中断，请先到目标群确认是否已送达")
-        if (
-            receipt.get("status") == "succeeded"
-            and receipt.get("message_sha256") == message_hash
-            and same_target
-        ):
-            return {**receipt, "skipped": True}
+    # Codex's backup task and macOS launchd can fire close together.  Hold a
+    # cross-process lock across the receipt check and API call so only one
+    # sender can claim this edition at a time.
+    with _delivery_lock(output_dir):
+        if not app_id or not app_secret:
+            raise FeishuError("缺少 FEISHU_APP_ID 或 FEISHU_APP_SECRET")
+        token = get_tenant_access_token(app_id, app_secret)
+        chat_id = find_chat_id(list_chats(token), chat_name)
+        if receipt_path.is_file():
+            receipt = _load_json(receipt_path)
+            same_target = receipt.get("app_id") == app_id and receipt.get("chat_id") == chat_id
+            if receipt.get("status") == "sending":
+                raise FeishuError("上一次飞书投递在发送中中断，请先到目标群确认是否已送达")
+            if (
+                receipt.get("status") == "succeeded"
+                and receipt.get("message_sha256") == message_hash
+                and same_target
+            ):
+                return {**receipt, "skipped": True}
 
-    delivery_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"signalbloom:{app_id}:{chat_id}:{message_hash}"))
-    pending = {
-        "status": "sending",
-        "edition_date": bundle.get("edition_date"),
-        "app_id": app_id,
-        "chat_name": chat_name,
-        "chat_id": chat_id,
-        "delivery_uuid": delivery_uuid,
-        "bundle_sha256": bundle_hash,
-        "message_sha256": message_hash,
-        "attempted_at": datetime.now(timezone.utc).isoformat(),
-    }
-    _write_receipt(receipt_path, pending)
-    try:
-        message = send_post(token, chat_id, post, delivery_uuid)
-    except FeishuError:
-        _write_receipt(
-            receipt_path,
-            {**pending, "status": "failed", "failed_at": datetime.now(timezone.utc).isoformat()},
-        )
-        raise
-    message_id = message.get("message_id")
-    if not message_id:
-        raise FeishuError("飞书返回成功，但没有 message_id")
-    receipt = {
-        "status": "succeeded",
-        "edition_date": bundle.get("edition_date"),
-        "app_id": app_id,
-        "chat_name": chat_name,
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "delivery_uuid": delivery_uuid,
-        "bundle_sha256": bundle_hash,
-        "message_sha256": message_hash,
-        "sent_at": datetime.now(timezone.utc).isoformat(),
-    }
-    _write_receipt(receipt_path, receipt)
-    return receipt
+        delivery_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"signalbloom:{app_id}:{chat_id}:{message_hash}"))
+        pending = {
+            "status": "sending",
+            "edition_date": bundle.get("edition_date"),
+            "app_id": app_id,
+            "chat_name": chat_name,
+            "chat_id": chat_id,
+            "delivery_uuid": delivery_uuid,
+            "bundle_sha256": bundle_hash,
+            "message_sha256": message_hash,
+            "attempted_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _write_receipt(receipt_path, pending)
+        try:
+            message = send_post(token, chat_id, post, delivery_uuid)
+        except FeishuError:
+            _write_receipt(
+                receipt_path,
+                {**pending, "status": "failed", "failed_at": datetime.now(timezone.utc).isoformat()},
+            )
+            raise
+        message_id = message.get("message_id")
+        if not message_id:
+            raise FeishuError("飞书返回成功，但没有 message_id")
+        receipt = {
+            "status": "succeeded",
+            "edition_date": bundle.get("edition_date"),
+            "app_id": app_id,
+            "chat_name": chat_name,
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "delivery_uuid": delivery_uuid,
+            "bundle_sha256": bundle_hash,
+            "message_sha256": message_hash,
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+        }
+        _write_receipt(receipt_path, receipt)
+        return receipt
