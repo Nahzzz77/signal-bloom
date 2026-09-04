@@ -64,9 +64,15 @@ def _reason(exc: Exception) -> str:
         return "credentials_missing"
     if "机器人所在群" in message:
         return "target_group_mismatch"
-    if "Manifest" in message or "研究" in message or "缺少本地文件" in message:
+    if "Manifest" in message or "研究" in message or "缺少本地文件" in message or "日期" in message:
         return "content_validation_failed"
     return "delivery_failed"
+
+
+def _require_current_edition(value: object, edition_date: str) -> dict:
+    if not isinstance(value, dict) or value.get("edition_date") != edition_date:
+        raise ValueError("当日输出日期与当前日期不一致")
+    return value
 
 
 def main() -> int:
@@ -96,8 +102,10 @@ def main() -> int:
             "app_secret": local_env.get("FEISHU_APP_SECRET", ""),
             "chat_name": local_env.get("FEISHU_CHAT_NAME", "SignalBloom 私人资讯"),
         }
-        dry_run = module.sync_output(output_dir, dry_run=True, **kwargs)
-        result = module.sync_output(output_dir, **kwargs)
+        dry_run = _require_current_edition(
+            module.sync_output(output_dir, dry_run=True, **kwargs), edition_date
+        )
+        result = _require_current_edition(module.sync_output(output_dir, **kwargs), edition_date)
         print(
             json.dumps(
                 {

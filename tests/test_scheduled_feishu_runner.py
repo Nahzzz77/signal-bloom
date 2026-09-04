@@ -17,7 +17,9 @@ RUNNER = ROOT / "scripts" / "scheduled_feishu_runner.py"
 
 
 class ScheduledFeishuRunnerTests(unittest.TestCase):
-    def _install(self, temp: Path, *, create_output: bool) -> Path:
+    def _install(
+        self, temp: Path, *, create_output: bool, reported_date: str | None = None
+    ) -> Path:
         install_dir = temp / "installed"
         install_dir.mkdir()
         runner = install_dir / "runner.py"
@@ -34,13 +36,17 @@ class ScheduledFeishuRunnerTests(unittest.TestCase):
         if create_output:
             (project_dir / "outputs" / edition_date).mkdir(parents=True)
         module = install_dir / "feishu.py"
+        date_literal = repr(reported_date) if reported_date else (
+            "__import__('datetime').datetime.now(__import__('zoneinfo').ZoneInfo('Asia/Shanghai')).date().isoformat()"
+        )
         module.write_text(
             "def sync_output(output_dir, *, app_id, app_secret, chat_name, dry_run=False):\n"
             "    assert app_id == 'private-app' and app_secret == 'private-secret'\n"
             "    assert chat_name == 'private-group'\n"
+            f"    edition_date = {date_literal}\n"
             "    if dry_run:\n"
-            "        return {'status': 'dry_run', 'item_count': 10}\n"
-            "    return {'status': 'succeeded', 'message_id': 'private-message'}\n",
+            "        return {'status': 'dry_run', 'item_count': 10, 'edition_date': edition_date}\n"
+            "    return {'status': 'succeeded', 'message_id': 'private-message', 'edition_date': edition_date}\n",
             encoding="utf-8",
         )
         (install_dir / "config.json").write_text(
@@ -74,6 +80,17 @@ class ScheduledFeishuRunnerTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(json.loads(result.stdout)["status"], "waiting")
+
+    def test_runner_rejects_output_for_another_date(self) -> None:
+        with tempfile.TemporaryDirectory() as raw_temp:
+            runner = self._install(
+                Path(raw_temp), create_output=True, reported_date="2000-01-01"
+            )
+            result = subprocess.run(
+                [sys.executable, str(runner)], capture_output=True, text=True, check=False
+            )
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(json.loads(result.stderr)["reason"], "content_validation_failed")
 
 
 if __name__ == "__main__":
