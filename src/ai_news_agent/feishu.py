@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 import uuid
 from collections import Counter
 from datetime import datetime, timezone
@@ -13,6 +14,7 @@ from urllib.request import Request, urlopen
 
 API_BASE = "https://open.feishu.cn/open-apis"
 MAX_POST_BYTES = 50_000
+MAX_REQUEST_ATTEMPTS = 3
 STATUS_LABELS = {
     "supported": "已核实",
     "partial": "部分支持",
@@ -41,20 +43,31 @@ def _request_json(
         headers["Authorization"] = f"Bearer {token}"
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8") if payload is not None else None
     request = Request(url, data=data, headers=headers, method=method)
-    try:
-        with urlopen(request, timeout=20) as response:
-            value = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
+    for attempt in range(MAX_REQUEST_ATTEMPTS):
         try:
-            value = json.loads(exc.read().decode("utf-8"))
-            detail = f"{value.get('code', exc.code)}: {value.get('msg', exc.reason)}"
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            detail = f"HTTP {exc.code}: {exc.reason}"
-        raise FeishuError(f"飞书 API 请求失败（{detail}）") from None
-    except URLError as exc:
-        raise FeishuError(f"无法连接飞书 API（{exc.reason}）") from None
-    except json.JSONDecodeError:
-        raise FeishuError("飞书 API 返回了无法解析的响应") from None
+            with urlopen(request, timeout=20) as response:
+                value = json.loads(response.read().decode("utf-8"))
+            break
+        except HTTPError as exc:
+            retryable = exc.code == 408 or exc.code == 425 or exc.code == 429 or exc.code >= 500
+            if retryable and attempt < MAX_REQUEST_ATTEMPTS - 1:
+                time.sleep(2**attempt)
+                continue
+            try:
+                value = json.loads(exc.read().decode("utf-8"))
+                detail = f"{value.get('code', exc.code)}: {value.get('msg', exc.reason)}"
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                detail = f"HTTP {exc.code}: {exc.reason}"
+            raise FeishuError(f"飞书 API 请求失败（{detail}）") from None
+        except URLError as exc:
+            if attempt < MAX_REQUEST_ATTEMPTS - 1:
+                time.sleep(2**attempt)
+                continue
+            raise FeishuError(f"无法连接飞书 API（{exc.reason}）") from None
+        except json.JSONDecodeError:
+            raise FeishuError("飞书 API 返回了无法解析的响应") from None
+    else:  # pragma: no cover - the loop either breaks or raises above.
+        raise FeishuError("飞书 API 请求未完成")
     if not isinstance(value, dict):
         raise FeishuError("飞书 API 返回格式不正确")
     if value.get("code", 0) != 0:

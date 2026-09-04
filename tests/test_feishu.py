@@ -6,8 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import URLError
 
-from ai_news_agent.feishu import FeishuError, build_post, find_chat_id, sync_output
+from ai_news_agent.feishu import FeishuError, _request_json, build_post, find_chat_id, sync_output
 
 
 def bundle() -> dict:
@@ -118,6 +119,27 @@ def write_output(
 
 
 class FeishuTests(unittest.TestCase):
+    def test_request_retries_transient_network_error(self) -> None:
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b'{"code": 0, "data": {}}'
+
+        with (
+            patch("ai_news_agent.feishu.urlopen", side_effect=[URLError("temporary"), Response()]) as request,
+            patch("ai_news_agent.feishu.time.sleep") as sleep,
+        ):
+            result = _request_json("GET", "/health")
+
+        self.assertEqual(result, {"code": 0, "data": {}})
+        self.assertEqual(request.call_count, 2)
+        sleep.assert_called_once_with(1)
+
     def test_build_post_preserves_editorial_evidence(self) -> None:
         value = bundle()
         post = build_post(value)
