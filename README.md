@@ -219,6 +219,8 @@ PYTHONPATH=src python3 -m ai_news_agent sync-feishu \
 
 每天 15:10 还有一个独立的本地 watchdog 检查当天 `feishu_delivery.json`。如果回执不是当天的 `succeeded`，它会弹出 macOS 通知并在日志中记录异常；它不会回退发送旧日期或演示内容。watchdog 与 runner 一样安装在用户目录之外，安装配置中的 `project_dir` 必须是当前电脑上的绝对路径，换电脑时需要重新安装或改配置。电脑关机、未登录或系统通知被关闭时，macOS 本地通知无法显示；这属于本地调度的运行边界。
 
+两个 Codex 定时任务的通知策略也设置为“仅失败时提醒”：正常的等待、跳过和成功不会重复打扰；准备或投递任务真正失败时，会在 Codex 中留下失败通知供排查。
+
 ## 数据隐私边界
 
 公开仓库只保存功能代码、Schema、Prompt、虚构结构示例和已授权的 UI 素材。以下内容默认只属于运行它的当前用户：
